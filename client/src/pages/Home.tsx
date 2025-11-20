@@ -222,6 +222,16 @@ export default function Home() {
         </Button>
       </Link>
 
+      {/* Hologram Display link */}
+      <Button
+        size="sm"
+        variant="outline"
+        className="absolute top-6 right-20 z-50 text-[hsl(48,100%,50%)] hover:text-[hsl(48,100%,70%)] hover:bg-[hsl(48,100%,50%)]/10 transition-colors border-[hsl(48,100%,50%)]/30"
+        onClick={() => window.open('/hologram', '_blank', 'width=1200,height=800')}
+      >
+        Open Hologram Display
+      </Button>
+
       <div className="container mx-auto h-full max-w-5xl px-2 sm:px-4 py-4 sm:py-8">
         <AnimatePresence mode="wait">
           {isIdle ? (
