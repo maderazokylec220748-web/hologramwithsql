@@ -80,7 +80,7 @@ export function FaqManager() {
     setFormData({
       question: faq.question,
       answer: faq.answer,
-      category: faq.category,
+      category: faq.category as "admissions" | "academic" | "campus" | "scholarships" | "general",
       priority: faq.priority,
       isActive: faq.isActive,
     });
@@ -193,7 +193,7 @@ export function FaqManager() {
                 <label className="text-sm font-medium">Category</label>
                 <Select
                   value={formData.category}
-                  onValueChange={(value) => setFormData({ ...formData, category: value })}
+                  onValueChange={(value) => setFormData({ ...formData, category: value as "admissions" | "academic" | "campus" | "scholarships" | "general" })}
                 >
                   <SelectTrigger data-testid="select-faq-category">
                     <SelectValue />

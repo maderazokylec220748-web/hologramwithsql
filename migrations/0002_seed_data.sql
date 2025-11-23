@@ -1,11 +1,20 @@
 -- Seed initial data
 USE hologram;
 
--- Create default admin user
--- Password: admin123 (bcrypt hash)
-INSERT INTO admin_users (id, username, password, role, full_name, email) VALUES 
-('admin-uuid-12345', 'admin', '$2b$10$ptFUWfS1r4OoynMyJ3gykelE/KsAjkX5YyG1MVjFzqXYDE1.tZa8a', 'admin', 'System Administrator', 'admin@westmead.edu.ph')
-ON DUPLICATE KEY UPDATE password=VALUES(password);
+-- ⚠️ SECURITY WARNING: Default admin credentials removed for security
+-- DO NOT commit default credentials to version control
+-- Create your admin user manually after deployment:
+-- 
+-- Example command (replace with your own values):
+-- INSERT INTO admin_users (id, username, password, role, full_name, email) VALUES 
+-- (UUID(), 'your_username', 'YOUR_BCRYPT_HASH_HERE', 'admin', 'Your Name', 'your.email@westmead.edu.ph');
+--
+-- Generate bcrypt hash using: node scripts/generate-hash.js your_password
+--
+-- For initial setup ONLY (remove after creating your real admin):
+-- INSERT INTO admin_users (id, username, password, role, full_name, email) VALUES 
+-- ('admin-uuid-12345', 'admin', '$2b$10$ptFUWfS1r4OoynMyJ3gykelE/KsAjkX5YyG1MVjFzqXYDE1.tZa8a', 'admin', 'System Administrator', 'admin@westmead.edu.ph')
+-- ON DUPLICATE KEY UPDATE password=VALUES(password);
 
 -- Sample FAQs
 INSERT INTO faqs (id, question, answer, category, priority, is_active) VALUES 

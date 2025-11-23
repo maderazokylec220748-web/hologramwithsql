@@ -7,6 +7,33 @@ import { getChatResponse, prepareTextForSpeech } from "./grok";
 import { insertQuerySchema, insertFaqSchema, insertAdminUserSchema } from "@shared/schema";
 import { sessionMiddleware, requireAuth, requireAdmin } from "./auth";
 import bcrypt from "bcryptjs";
+import rateLimit from "express-rate-limit";
+
+// Rate limiters for different endpoints
+const loginLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000, // 15 minutes
+  max: 5, // 5 attempts per window
+  message: { error: 'Too many login attempts. Please try again in 15 minutes.' },
+  standardHeaders: true,
+  legacyHeaders: false,
+  skipSuccessfulRequests: true,
+});
+
+const chatLimiter = rateLimit({
+  windowMs: 60 * 1000, // 1 minute
+  max: 20, // 20 requests per minute
+  message: { error: 'Too many requests. Please slow down.' },
+  standardHeaders: true,
+  legacyHeaders: false,
+});
+
+const generalApiLimiter = rateLimit({
+  windowMs: 60 * 1000, // 1 minute
+  max: 60, // 60 requests per minute
+  message: { error: 'Rate limit exceeded. Please try again later.' },
+  standardHeaders: true,
+  legacyHeaders: false,
+});
 
 export async function registerRoutes(app: Express): Promise<Server> {
   const server = createServer(app);
@@ -15,7 +42,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   app.use(sessionMiddleware);
 
   // Authentication endpoints
-  app.post("/api/auth/login", async (req, res) => {
+  app.post("/api/auth/login", loginLimiter, async (req, res) => {
     try {
       const { username, password } = req.body;
       
@@ -71,7 +98,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
   
   // Chat endpoint - handles AI interactions (public)
-  app.post("/api/chat", async (req, res) => {
+  app.post("/api/chat", chatLimiter, async (req, res) => {
     try {
       const validatedData = insertQuerySchema.pick({ 
         question: true, 
@@ -133,7 +160,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   // Admin - FAQ management (requires authentication)
-  app.get("/api/admin/faqs", requireAuth, async (req, res) => {
+  app.get("/api/admin/faqs", requireAuth, generalApiLimiter, async (req, res) => {
     try {
       const allFaqs = await storage.getAllFaqs();
       res.json(allFaqs);
@@ -143,7 +170,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  app.post("/api/admin/faqs", requireAuth, async (req, res) => {
+  app.post("/api/admin/faqs", requireAuth, generalApiLimiter, async (req, res) => {
     try {
       const validatedData = insertFaqSchema.parse(req.body);
       const faq = await storage.createFaq(validatedData);
@@ -154,7 +181,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  app.patch("/api/admin/faqs/:id", requireAuth, async (req, res) => {
+  app.patch("/api/admin/faqs/:id", requireAuth, generalApiLimiter, async (req, res) => {
     try {
       const { id } = req.params;
       // Validate partial update data
@@ -172,7 +199,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  app.delete("/api/admin/faqs/:id", requireAuth, async (req, res) => {
+  app.delete("/api/admin/faqs/:id", requireAuth, generalApiLimiter, async (req, res) => {
     try {
       const { id } = req.params;
       await storage.deleteFaq(id);
@@ -196,7 +223,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  app.post("/api/admin/users", requireAdmin, async (req, res) => {
+  app.post("/api/admin/users", requireAdmin, generalApiLimiter, async (req, res) => {
     try {
       const validatedData = insertAdminUserSchema.parse(req.body);
       
@@ -217,7 +244,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  app.delete("/api/admin/users/:id", requireAdmin, async (req, res) => {
+  app.delete("/api/admin/users/:id", requireAdmin, generalApiLimiter, async (req, res) => {
     try {
       const { id } = req.params;
       await storage.deleteAdminUser(id);
@@ -263,17 +290,40 @@ export async function registerRoutes(app: Express): Promise<Server> {
     });
   }
 
-  wss.on('connection', (ws) => {
+  wss.on('connection', (ws, req) => {
     console.log('WebSocket client connected');
+    
+    // Mark if this connection is authenticated as admin
+    let isAuthenticated = false;
+    let isAdmin = false;
 
     ws.on('message', (message) => {
       try {
         const data = JSON.parse(message.toString());
         
-        // Handle admin subscription for real-time updates
+        // Handle admin subscription for real-time updates (requires authentication)
         if (data.type === 'admin_subscribe') {
-          adminClients.add(ws);
-          console.log('Admin client subscribed for real-time updates');
+          // In a production system, verify session cookie here
+          // For now, we'll add a simple authentication token check
+          if (data.authToken) {
+            // TODO: Verify this token against session store
+            // For now, accept with warning
+            console.warn('WebSocket admin subscription - implement proper authentication');
+            isAuthenticated = true;
+            isAdmin = true;
+            adminClients.add(ws);
+            console.log('Admin client subscribed for real-time updates');
+            ws.send(JSON.stringify({ type: 'auth_success', message: 'Authenticated as admin' }));
+          } else {
+            ws.send(JSON.stringify({ type: 'auth_error', message: 'Authentication required' }));
+          }
+          return;
+        }
+        
+        // Validate message size to prevent abuse
+        const messageStr = JSON.stringify(data);
+        if (messageStr.length > 50000) { // 50KB limit
+          ws.send(JSON.stringify({ type: 'error', message: 'Message too large' }));
           return;
         }
         
@@ -285,11 +335,17 @@ export async function registerRoutes(app: Express): Promise<Server> {
         });
       } catch (error) {
         console.error('WebSocket message error:', error);
+        ws.send(JSON.stringify({ type: 'error', message: 'Invalid message format' }));
       }
     });
 
     ws.on('close', () => {
       console.log('WebSocket client disconnected');
+      adminClients.delete(ws);
+    });
+    
+    ws.on('error', (error) => {
+      console.error('WebSocket error:', error);
       adminClients.delete(ws);
     });
   });

@@ -57,19 +57,26 @@ DATABASE_URL=mysql://username:password@localhost:3306/hologram
 DATABASE_HOST=localhost
 DATABASE_PORT=3306
 DATABASE_USER=root
-DATABASE_PASSWORD=your_password
+DATABASE_PASSWORD=your_strong_password_here
 DATABASE_NAME=hologram
 
-# OpenAI API configuration
-OPENAI_API_KEY=your_groq_api_key_here
+# Groq API configuration (get your key from https://console.groq.com/keys)
+GROQ_API_KEY=your_groq_api_key_here
 
 # Server configuration
 PORT=3000
 NODE_ENV=development
 
-# Session secret (change this in production)
-SESSION_SECRET=westmead-hologram-secret-key-2024
+# Session secret (MUST be cryptographically random - generate using below command)
+# Generate with: node -e "console.log(require('crypto').randomBytes(64).toString('hex'))"
+SESSION_SECRET=your_generated_random_secret_here
 \`\`\`
+
+**🔒 IMPORTANT SECURITY NOTES:**
+- **NEVER** commit your actual `.env` file to version control (it's already in `.gitignore`)
+- **SET A STRONG DATABASE PASSWORD** - Never use an empty password
+- **GENERATE A RANDOM SESSION SECRET** - Use the command provided above
+- **REGENERATE API KEYS** - If you accidentally expose them
 
 ### 4. Run Database Migrations
 
@@ -80,8 +87,20 @@ npm run db:setup
 
 This will:
 - Create the required database tables
-- Insert default admin user (username: `admin`, password: `admin123`)
 - Add sample FAQ entries
+
+**⚠️ ADMIN USER CREATION:**
+Default admin credentials have been removed for security. Create your admin user manually:
+
+\`\`\`bash
+# Generate a password hash
+node scripts/generate-hash.js YourSecurePassword123
+
+# Then in MySQL, insert your admin user:
+# mysql -u root -p hologram
+# INSERT INTO admin_users (id, username, password, role, full_name, email) 
+# VALUES (UUID(), 'yourusername', 'PASTE_BCRYPT_HASH_HERE', 'admin', 'Your Name', 'your.email@westmead.edu.ph');
+\`\`\`
 
 ### 5. Start the Development Server
 
@@ -99,15 +118,15 @@ The application will be available at \`http://localhost:3000\`
 - Get AI-powered responses with text-to-speech
 
 ### For Administrators
-1. Go to `/admin` and login with:
-   - Username: \`admin\`
-   - Password: \`admin123\`
+1. Go to `/admin` and login with your created admin credentials
 
 2. Access the admin dashboard to:
    - View real-time query analytics
    - Manage FAQs
    - Create/manage admin users
    - Monitor user interactions with live updates
+
+3. **Change your password immediately** after first login for security
 
 ## Real-time Features
 
@@ -150,13 +169,61 @@ This version has been completely migrated from PostgreSQL to MySQL:
 - **faqs**: Frequently asked questions management
 - **sessions**: Session storage (created automatically)
 
+## Security Features
+
+This application implements multiple layers of security:
+
+### ✅ Implemented Security Measures
+- **Rate Limiting**: Prevents brute force attacks and API abuse
+  - Login: 5 attempts per 15 minutes
+  - Chat API: 20 requests per minute
+  - Admin APIs: 60 requests per minute
+- **Input Validation**: All inputs validated with Zod schemas
+  - Maximum field lengths enforced
+  - Type checking and sanitization
+  - SQL injection prevention via Drizzle ORM
+- **Password Security**: Bcrypt hashing with 10 rounds
+- **Session Management**: Secure session-based authentication
+  - HTTP-only cookies in production
+  - Cryptographically random session secrets
+  - 30-day session expiration
+- **CORS Protection**: Configured allowed origins
+- **Security Headers**: Helmet middleware for HTTP headers
+- **Connection Pooling**: Database connection limits prevent exhaustion
+- **Error Handling**: React Error Boundary for graceful error recovery
+- **WebSocket Security**: Message size limits and validation
+
+### 🔒 Security Best Practices
+1. **Never commit `.env` files** to version control
+2. **Use strong passwords** (minimum 8 characters with uppercase, lowercase, and numbers)
+3. **Regenerate API keys** if accidentally exposed
+4. **Keep dependencies updated** regularly
+5. **Use HTTPS** in production environments
+6. **Monitor logs** for suspicious activity
+7. **Regular database backups**
+8. **Principle of least privilege** for database users
+
+### ⚠️ Before Production Deployment
+- [ ] Set strong MySQL root password
+- [ ] Generate new Groq API key
+- [ ] Generate cryptographic SESSION_SECRET
+- [ ] Create admin user with strong credentials
+- [ ] Enable HTTPS/SSL
+- [ ] Configure firewall rules
+- [ ] Set up database backups
+- [ ] Configure proper ALLOWED_ORIGINS for CORS
+- [ ] Review and test all security measures
+
 ## Production Deployment
 
 1. Set \`NODE_ENV=production\` in your environment
-2. Use a strong \`SESSION_SECRET\`
-3. Configure proper MySQL credentials
-4. Build the application: \`npm run build\`
-5. Start the production server: \`npm start\`
+2. Use a cryptographically random \`SESSION_SECRET\`
+3. Configure proper MySQL credentials with strong password
+4. Set up HTTPS/SSL certificates
+5. Configure \`ALLOWED_ORIGINS\` for CORS
+6. Build the application: \`npm run build\`
+7. Start the production server: \`npm start\`
+8. Monitor logs and set up alerts
 
 ## Contributing
 

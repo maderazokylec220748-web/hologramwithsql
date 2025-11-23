@@ -37,21 +37,76 @@ export const faqs = mysqlTable("faqs", {
   updatedAt: timestamp("updated_at").notNull().defaultNow(),
 });
 
-// Insert schemas
+// Insert schemas with enhanced validation
 export const insertAdminUserSchema = createInsertSchema(adminUsers).omit({
   id: true,
   createdAt: true,
+}).extend({
+  username: z.string()
+    .min(3, "Username must be at least 3 characters")
+    .max(50, "Username must not exceed 50 characters")
+    .trim()
+    .toLowerCase()
+    .regex(/^[a-z0-9_-]+$/, "Username can only contain lowercase letters, numbers, hyphens and underscores"),
+  password: z.string()
+    .min(8, "Password must be at least 8 characters")
+    .max(100, "Password must not exceed 100 characters")
+    .regex(/^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)/, "Password must contain at least one uppercase letter, one lowercase letter, and one number"),
+  role: z.enum(['admin', 'professor']).default('admin'),
+  fullName: z.string()
+    .min(3, "Full name must be at least 3 characters")
+    .max(100, "Full name must not exceed 100 characters")
+    .trim(),
+  email: z.string()
+    .email("Invalid email format")
+    .max(255, "Email must not exceed 255 characters")
+    .trim()
+    .toLowerCase(),
 });
 
 export const insertQuerySchema = createInsertSchema(queries).omit({
   id: true,
   createdAt: true,
+}).extend({
+  question: z.string()
+    .min(1, "Question cannot be empty")
+    .max(1000, "Question must not exceed 1000 characters")
+    .trim(),
+  answer: z.string()
+    .min(1, "Answer cannot be empty")
+    .max(5000, "Answer must not exceed 5000 characters")
+    .trim(),
+  userType: z.enum(['visitor', 'student', 'parent']).default('visitor'),
+  category: z.string()
+    .max(50, "Category must not exceed 50 characters")
+    .nullable()
+    .optional(),
+  responseTime: z.number()
+    .int()
+    .positive()
+    .optional(),
 });
 
 export const insertFaqSchema = createInsertSchema(faqs).omit({
   id: true,
   createdAt: true,
   updatedAt: true,
+}).extend({
+  question: z.string()
+    .min(10, "Question must be at least 10 characters")
+    .max(500, "Question must not exceed 500 characters")
+    .trim(),
+  answer: z.string()
+    .min(20, "Answer must be at least 20 characters")
+    .max(2000, "Answer must not exceed 2000 characters")
+    .trim(),
+  category: z.enum(['admissions', 'academic', 'campus', 'scholarships', 'general']),
+  priority: z.number()
+    .int()
+    .min(0, "Priority cannot be negative")
+    .max(100, "Priority cannot exceed 100")
+    .default(0),
+  isActive: z.boolean().default(true),
 });
 
 // Types
