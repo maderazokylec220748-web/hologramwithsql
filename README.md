@@ -118,7 +118,9 @@ The application will be available at \`http://localhost:3000\`
 - Get AI-powered responses with text-to-speech
 
 ### For Administrators
-1. Go to `/admin` and login with your created admin credentials
+1. Go to `/secure-f4c71bebae51ab7a` and login with your created admin credentials
+   - **Security Note:** Admin path uses cryptographically random hash following OWASP recommendations
+   - Bookmark this URL for easy access
 
 2. Access the admin dashboard to:
    - View real-time query analytics

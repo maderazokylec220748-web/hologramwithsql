@@ -12,7 +12,7 @@ function Router() {
   return (
     <Switch>
       <Route path="/" component={Home} />
-      <Route path="/admin" component={Admin} />
+      <Route path="/secure-f4c71bebae51ab7a" component={Admin} />
       <Route path="/hologram" component={Hologram} />
       <Route component={NotFound} />
     </Switch>

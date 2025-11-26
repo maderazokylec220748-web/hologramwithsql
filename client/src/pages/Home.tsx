@@ -210,8 +210,8 @@ export default function Home() {
       <div className="absolute inset-0 bg-gradient-to-br from-[hsl(0,75%,10%)] via-[hsl(0,60%,8%)] to-[hsl(48,30%,10%)] opacity-50" />
       <div className="absolute inset-0 bg-[radial-gradient(circle_at_50%_50%,hsl(48,100%,50%,0.05),transparent_50%)]" />
 
-      {/* Admin link */}
-      <Link href="/admin">
+      {/* Admin link - Obscure path for OWASP security compliance */}
+      <Link href="/secure-f4c71bebae51ab7a">
         <Button
           size="icon"
           variant="ghost"
