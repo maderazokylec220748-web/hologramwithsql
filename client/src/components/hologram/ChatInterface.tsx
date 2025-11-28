@@ -1,29 +1,47 @@
 import { useState, useRef, useEffect } from "react";
 import { motion, AnimatePresence } from "framer-motion";
-import { Send, Mic, MicOff } from "lucide-react";
+import { Send, Mic, MicOff, StopCircle } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { cn } from "@/lib/utils";
 
-function TypewriterText({ text }: { text: string }) {
+function TypewriterText({ text, key: messageKey }: { text: string; key: string }) {
   const [displayedText, setDisplayedText] = useState("");
   const [currentIndex, setCurrentIndex] = useState(0);
+  const isMountedRef = useRef(true);
+  const timeoutRef = useRef<NodeJS.Timeout | null>(null);
 
   useEffect(() => {
-    if (currentIndex < text.length) {
-      const timeout = setTimeout(() => {
-        setDisplayedText(prev => prev + text[currentIndex]);
-        setCurrentIndex(prev => prev + 1);
-      }, 30); // Adjust speed here (lower = faster)
-      
-      return () => clearTimeout(timeout);
-    }
-  }, [currentIndex, text]);
-
-  useEffect(() => {
+    isMountedRef.current = true;
     setDisplayedText("");
     setCurrentIndex(0);
-  }, [text]);
+    
+    return () => {
+      isMountedRef.current = false;
+      if (timeoutRef.current) {
+        clearTimeout(timeoutRef.current);
+        timeoutRef.current = null;
+      }
+    };
+  }, [messageKey, text]);
+
+  useEffect(() => {
+    if (!isMountedRef.current || currentIndex >= text.length) return;
+    
+    timeoutRef.current = setTimeout(() => {
+      if (isMountedRef.current) {
+        setDisplayedText(prev => prev + text[currentIndex]);
+        setCurrentIndex(prev => prev + 1);
+      }
+    }, 30); // Adjust speed here (lower = faster)
+    
+    return () => {
+      if (timeoutRef.current) {
+        clearTimeout(timeoutRef.current);
+        timeoutRef.current = null;
+      }
+    };
+  }, [currentIndex, text]);
 
   // Split text by newlines and render each line
   const lines = displayedText.split('\n');
@@ -53,6 +71,8 @@ interface ChatInterfaceProps {
   isTyping: boolean;
   isListening: boolean;
   onToggleListening: () => void;
+  isSpeaking: boolean;
+  onStop: () => void;
 }
 
 export function ChatInterface({
@@ -61,6 +81,8 @@ export function ChatInterface({
   isTyping,
   isListening,
   onToggleListening,
+  isSpeaking,
+  onStop,
 }: ChatInterfaceProps) {
   const [input, setInput] = useState("");
   const messagesEndRef = useRef<HTMLDivElement>(null);
@@ -108,7 +130,7 @@ export function ChatInterface({
                   transition={{ duration: 0.5 }}
                 >
                   {!message.isUser ? (
-                    <TypewriterText text={message.text} />
+                    <TypewriterText text={message.text} key={message.id} />
                   ) : (
                     message.text
                   )}
@@ -178,15 +200,28 @@ export function ChatInterface({
             {isListening ? <Mic className="w-4 h-4 sm:w-5 sm:h-5" /> : <MicOff className="w-4 h-4 sm:w-5 sm:h-5" />}
           </Button>
 
-          <Button
-            type="submit"
-            size="icon"
-            disabled={!input.trim()}
-            className="bg-[hsl(48,100%,50%)] text-[hsl(0,75%,25%)] hover:bg-[hsl(48,100%,60%)] h-9 w-9 sm:h-10 sm:w-10"
-            data-testid="button-send-message"
-          >
-            <Send className="w-4 h-4 sm:w-5 sm:h-5" />
-          </Button>
+          {isSpeaking || isTyping ? (
+            <Button
+              type="button"
+              size="icon"
+              onClick={onStop}
+              className="bg-red-500 text-white hover:bg-red-600 h-9 w-9 sm:h-10 sm:w-10 animate-pulse"
+              data-testid="button-stop-speech"
+              title="Stop speaking"
+            >
+              <StopCircle className="w-4 h-4 sm:w-5 sm:h-5" />
+            </Button>
+          ) : (
+            <Button
+              type="submit"
+              size="icon"
+              disabled={!input.trim()}
+              className="bg-[hsl(48,100%,50%)] text-[hsl(0,75%,25%)] hover:bg-[hsl(48,100%,60%)] h-9 w-9 sm:h-10 sm:w-10"
+              data-testid="button-send-message"
+            >
+              <Send className="w-4 h-4 sm:w-5 sm:h-5" />
+            </Button>
+          )}
         </form>
       </div>
     </div>

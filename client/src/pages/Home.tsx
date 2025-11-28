@@ -5,7 +5,7 @@ import { AvatarDisplay } from "@/components/hologram/AvatarDisplay";
 import { ChatInterface } from "@/components/hologram/ChatInterface";
 import { QuickActions } from "@/components/hologram/QuickActions";
 import { Button } from "@/components/ui/button";
-import { Settings } from "lucide-react";
+import { Settings, MonitorPlay } from "lucide-react";
 import { Link } from "wouter";
 
 interface Message {
@@ -24,6 +24,11 @@ export default function Home() {
   const [isIdle, setIsIdle] = useState(true);
   const [idleTimeout, setIdleTimeout] = useState<NodeJS.Timeout | null>(null);
   const wsRef = useRef<WebSocket | null>(null);
+  const abortControllerRef = useRef<AbortController | null>(null);
+  const speechTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+  const utteranceRef = useRef<SpeechSynthesisUtterance | null>(null);
+  const currentRequestIdRef = useRef<string | null>(null);
+  const isTypingRef = useRef<boolean>(false);
 
   // WebSocket connection for hologram sync
   useEffect(() => {
@@ -75,11 +80,48 @@ export default function Home() {
     };
   }, [idleTimeout]);
 
+  // Sync isTyping to ref for use in callbacks
+  useEffect(() => {
+    isTypingRef.current = isTyping;
+  }, [isTyping]);
+
   const handleSendMessage = async (text: string) => {
     resetIdleTimer();
     
+    // Generate unique ID for this request
+    const requestId = Date.now().toString();
+    currentRequestIdRef.current = requestId;
+    
+    console.log(`[${requestId}] Starting new request, aborting previous`);
+    
+    // Stop any ongoing operations from previous request
+    if (abortControllerRef.current) {
+      console.log(`[${requestId}] Aborting previous request`);
+      abortControllerRef.current.abort();
+    }
+    if (speechTimeoutRef.current) {
+      clearTimeout(speechTimeoutRef.current);
+      speechTimeoutRef.current = null;
+    }
+    forceStopSpeech();
+    setIsSpeaking(false);
+    setIsTyping(false);
+    broadcastToHologram(false);
+    
+    // Remove any incomplete AI messages from previous request
+    // (messages that are still being typed out)
+    setMessages((prev) => {
+      // Keep only user messages and complete AI messages
+      // Remove the last message if it's an AI message and we were typing
+      if (prev.length > 0 && !prev[prev.length - 1].isUser && isTypingRef.current) {
+        console.log(`[${requestId}] Removing incomplete AI message`);
+        return prev.slice(0, -1);
+      }
+      return prev;
+    });
+    
     const userMessage: Message = {
-      id: Date.now().toString(),
+      id: requestId,
       text,
       isUser: true,
       timestamp: new Date(),
@@ -88,17 +130,41 @@ export default function Home() {
     setMessages((prev) => [...prev, userMessage]);
     setIsTyping(true);
 
+    // Create new abort controller for this request
+    abortControllerRef.current = new AbortController();
+
     try {
       // Call the chat API
       const response = await fetch("/api/chat", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ question: text, userType: "visitor" }),
+        signal: abortControllerRef.current.signal,
       });
 
       if (!response.ok) throw new Error("Failed to get response");
 
       const data = await response.json();
+      
+      // CRITICAL: Check if this is still the current request
+      // If user sent new question, currentRequestIdRef will be new ID
+      console.log(`[${requestId}] Got response, current request: ${currentRequestIdRef.current}`);
+      if (currentRequestIdRef.current !== requestId) {
+        console.log(`[${requestId}] DISCARDING - Response is from old request (current: ${currentRequestIdRef.current})`);
+        setIsTyping(false);
+        setIsSpeaking(false);
+        return;
+      }
+      
+      console.log(`[${requestId}] Processing response`);
+      
+      // CRITICAL: Check AGAIN before creating message
+      if (currentRequestIdRef.current !== requestId) {
+        console.log(`[${requestId}] DISCARDING - Newer request exists before message creation`);
+        setIsTyping(false);
+        setIsSpeaking(false);
+        return;
+      }
       
       const aiMessage: Message = {
         id: (Date.now() + 1).toString(),
@@ -107,32 +173,73 @@ export default function Home() {
         timestamp: new Date(),
       };
       
+      // Check one more time before displaying
+      if (currentRequestIdRef.current !== requestId) {
+        console.log(`[${requestId}] DISCARDING - Newer request exists before display`);
+        setIsTyping(false);
+        setIsSpeaking(false);
+        return;
+      }
+      
+      console.log(`[${requestId}] Adding message to display`);
       setMessages((prev) => [...prev, aiMessage]);
       setIsTyping(false);
       setIsSpeaking(true);
+      
+      // Check before broadcasting
+      if (currentRequestIdRef.current !== requestId) {
+        console.log(`[${requestId}] DISCARDING - Newer request exists before broadcast - removing message`);
+        setIsSpeaking(false);
+        // Remove the message we just added
+        setMessages((prev) => prev.filter(m => m.id !== aiMessage.id));
+        return;
+      }
       
       // Broadcast to hologram that AI is speaking
       broadcastToHologram(true, data.answer);
 
       // Text-to-speech
-      if (!isMuted && 'speechSynthesis' in window) {
+      if (!isMuted && 'speechSynthesis' in window && currentRequestIdRef.current === requestId) {
         const utterance = new SpeechSynthesisUtterance(data.speechText || data.answer);
         utterance.rate = 0.9;
         utterance.pitch = 1.0;
         utterance.onend = () => {
+          utteranceRef.current = null;
           setIsSpeaking(false);
           broadcastToHologram(false);
         };
+        utterance.onerror = () => {
+          utteranceRef.current = null;
+          setIsSpeaking(false);
+          broadcastToHologram(false);
+        };
+        utteranceRef.current = utterance;
         window.speechSynthesis.speak(utterance);
       } else {
         // If no speech, just show speaking animation for message length
         const duration = Math.min(data.answer.length * 50, 5000);
-        setTimeout(() => {
-          setIsSpeaking(false);
-          broadcastToHologram(false);
+        speechTimeoutRef.current = setTimeout(() => {
+          if (currentRequestIdRef.current === requestId) {
+            setIsSpeaking(false);
+            broadcastToHologram(false);
+          }
+          speechTimeoutRef.current = null;
         }, duration);
       }
-    } catch (error) {
+    } catch (error: any) {
+      // Don't show error if request was aborted (user sent new question)
+      if (error.name === 'AbortError') {
+        console.log(`[${requestId}] Request aborted (new request started)`);
+        setIsTyping(false);
+        return;
+      }
+      
+      // Don't show error if this is not the current request
+      if (currentRequestIdRef.current !== requestId) {
+        console.log(`[${requestId}] Error in old request - ignoring`);
+        return;
+      }
+      
       console.error("Chat error:", error);
       const errorMessage: Message = {
         id: (Date.now() + 1).toString(),
@@ -145,23 +252,89 @@ export default function Home() {
     }
   };
 
+  const forceStopSpeech = () => {
+    if ('speechSynthesis' in window) {
+      // Stop current utterance
+      if (utteranceRef.current) {
+        utteranceRef.current.onend = null;
+        utteranceRef.current.onerror = null;
+      }
+      
+      // Aggressive stop: cancel multiple times and pause/resume to force immediate stop
+      window.speechSynthesis.cancel();
+      window.speechSynthesis.pause();
+      window.speechSynthesis.cancel();
+      
+      // Some browsers need resume then cancel again
+      setTimeout(() => {
+        window.speechSynthesis.resume();
+        window.speechSynthesis.cancel();
+      }, 0);
+      
+      utteranceRef.current = null;
+    }
+  };
+
+  const handleStop = () => {
+    console.log(`Stopping current request: ${currentRequestIdRef.current}`);
+    
+    // Don't clear the request ID - keep it so responses are still rejected
+    // Just mark typing as false so we know to remove message
+    
+    // Abort ongoing fetch request
+    if (abortControllerRef.current) {
+      abortControllerRef.current.abort();
+      abortControllerRef.current = null;
+    }
+    
+    // Clear speech timeout
+    if (speechTimeoutRef.current) {
+      clearTimeout(speechTimeoutRef.current);
+      speechTimeoutRef.current = null;
+    }
+    
+    // Force stop speech synthesis immediately
+    forceStopSpeech();
+    
+    // Remove any incomplete AI messages
+    if (isTypingRef.current) {
+      console.log("Removing incomplete AI message due to stop");
+      setMessages((prev) => {
+        // Remove last message if it's an incomplete AI response
+        if (prev.length > 0 && !prev[prev.length - 1].isUser) {
+          return prev.slice(0, -1);
+        }
+        return prev;
+      });
+    }
+    
+    // Reset all states immediately
+    setIsSpeaking(false);
+    setIsTyping(false);
+    broadcastToHologram(false);
+  };
+
   const handleToggleMute = () => {
     setIsMuted(!isMuted);
     
     // Stop any ongoing speech
-    if (!isMuted && 'speechSynthesis' in window) {
-      window.speechSynthesis.cancel();
+    if (!isMuted) {
+      forceStopSpeech();
       setIsSpeaking(false);
       broadcastToHologram(false);
     }
   };
 
-  // Cleanup speech on unmount
+  // Cleanup on unmount
   useEffect(() => {
     return () => {
-      if ('speechSynthesis' in window) {
-        window.speechSynthesis.cancel();
+      if (abortControllerRef.current) {
+        abortControllerRef.current.abort();
       }
+      if (speechTimeoutRef.current) {
+        clearTimeout(speechTimeoutRef.current);
+      }
+      forceStopSpeech();
     };
   }, []);
 
@@ -210,27 +383,32 @@ export default function Home() {
       <div className="absolute inset-0 bg-gradient-to-br from-[hsl(0,75%,10%)] via-[hsl(0,60%,8%)] to-[hsl(48,30%,10%)] opacity-50" />
       <div className="absolute inset-0 bg-[radial-gradient(circle_at_50%_50%,hsl(48,100%,50%,0.05),transparent_50%)]" />
 
-      {/* Admin link - Obscure path for OWASP security compliance */}
-      <Link href="/secure-f4c71bebae51ab7a">
+      {/* Top navigation buttons */}
+      <div className="absolute top-4 right-4 z-50 flex items-center gap-2">
+        {/* Hologram Display button */}
         <Button
           size="icon"
-          variant="ghost"
-          className="absolute top-6 right-6 z-50 text-[hsl(48,100%,50%)] hover:text-[hsl(48,100%,70%)] hover:bg-[hsl(48,100%,50%)]/10 transition-colors"
-          data-testid="link-admin"
+          variant="outline"
+          className="h-10 w-10 rounded-full bg-gradient-to-br from-[hsl(280,100%,50%)]/10 to-[hsl(48,100%,50%)]/10 border-[hsl(48,100%,50%)]/40 text-[hsl(48,100%,50%)] hover:text-[hsl(48,100%,70%)] hover:bg-[hsl(48,100%,50%)]/20 hover:border-[hsl(48,100%,50%)]/60 transition-all shadow-lg hover:shadow-[hsl(48,100%,50%)]/20 hover:scale-105"
+          onClick={() => window.open('/hologram', '_blank', 'width=1200,height=800')}
+          title="Open Hologram Display"
         >
-          <Settings className="w-6 h-6" />
+          <MonitorPlay className="h-5 w-5" />
         </Button>
-      </Link>
 
-      {/* Hologram Display link */}
-      <Button
-        size="sm"
-        variant="outline"
-        className="absolute top-6 right-20 z-50 text-[hsl(48,100%,50%)] hover:text-[hsl(48,100%,70%)] hover:bg-[hsl(48,100%,50%)]/10 transition-colors border-[hsl(48,100%,50%)]/30"
-        onClick={() => window.open('/hologram', '_blank', 'width=1200,height=800')}
-      >
-        Open Hologram Display
-      </Button>
+        {/* Admin Settings button - Obscure path for OWASP security compliance */}
+        <Link href="/secure-f4c71bebae51ab7a">
+          <Button
+            size="icon"
+            variant="outline"
+            className="h-10 w-10 rounded-full bg-gradient-to-br from-[hsl(48,100%,50%)]/10 to-[hsl(0,75%,50%)]/10 border-[hsl(48,100%,50%)]/40 text-[hsl(48,100%,50%)] hover:text-[hsl(48,100%,70%)] hover:bg-[hsl(48,100%,50%)]/20 hover:border-[hsl(48,100%,50%)]/60 transition-all shadow-lg hover:shadow-[hsl(48,100%,50%)]/20 hover:scale-105"
+            data-testid="link-admin"
+            title="Admin Settings"
+          >
+            <Settings className="h-5 w-5" />
+          </Button>
+        </Link>
+      </div>
 
       <div className="container mx-auto h-full max-w-5xl px-2 sm:px-4 py-4 sm:py-8">
         <AnimatePresence mode="wait">
@@ -273,6 +451,8 @@ export default function Home() {
                       isTyping={isTyping}
                       isListening={isListening}
                       onToggleListening={handleToggleListening}
+                      isSpeaking={isSpeaking}
+                      onStop={handleStop}
                     />
                   </div>
                 )}
