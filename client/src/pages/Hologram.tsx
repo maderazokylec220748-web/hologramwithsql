@@ -1,9 +1,11 @@
 import { useState, useEffect } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import logoImage from "@assets/westmead-removebg-preview_1760715284367.png";
+import { GLBModel } from "@/components/hologram/GLBModel";
 
 export default function Hologram() {
   const [isSpeaking, setIsSpeaking] = useState(false);
+  const [showTalking, setShowTalking] = useState(false);
 
   useEffect(() => {
     const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
@@ -32,6 +34,19 @@ export default function Hologram() {
       ws.close();
     };
   }, []);
+
+  // Keep talking heads visible for 1 minute after speaking stops
+  useEffect(() => {
+    if (isSpeaking) {
+      setShowTalking(true);
+    } else {
+      const timer = setTimeout(() => {
+        setShowTalking(false);
+      }, 60000); // 1 minute delay
+
+      return () => clearTimeout(timer);
+    }
+  }, [isSpeaking]);
 
   // Realistic AI Talking Head component
   const TalkingHead = ({ rotation }: { rotation: number }) => (
@@ -247,68 +262,41 @@ export default function Hologram() {
     </motion.div>
   );
 
+  // 3D Model display component for 4 positions
+  const Model3DDisplay = ({ rotation }: { rotation: number }) => (
+    <div 
+      className="absolute w-[40%] h-[40%] flex items-center justify-center"
+      style={{
+        ...(rotation === 0 && { top: '-10%', left: '50%', transform: 'translateX(-50%)' }),
+        ...(rotation === 180 && { bottom: '-10%', left: '50%', transform: 'translateX(-50%) rotate(180deg)' }),
+        ...(rotation === -90 && { left: '-10%', top: '50%', transform: 'translateY(-50%) rotate(-90deg)' }),
+        ...(rotation === 90 && { right: '-10%', top: '50%', transform: 'translateY(-50%) rotate(90deg)' })
+      }}
+    >
+      <GLBModel isSpeaking={isSpeaking} rotation={rotation} />
+    </div>
+  );
+
   return (
     <div className="relative w-full h-screen bg-black overflow-hidden">
-      {/* 4-sided hologram pyramid layout */}
-      <div className="absolute inset-0 flex items-center justify-center">
-        <div className="relative w-full h-full max-w-[100vh] max-h-[100vh]">
-          <AnimatePresence mode="wait">
-            {isSpeaking ? (
-              <motion.div
-                key="talking"
-                initial={{ opacity: 0, scale: 0.8 }}
-                animate={{ opacity: 1, scale: 1 }}
-                exit={{ opacity: 0, scale: 0.8 }}
-                transition={{ duration: 0.3 }}
-                className="absolute inset-0"
-              >
-                {/* Top - 0 degrees */}
-                <TalkingHead rotation={0} />
-                
-                {/* Bottom - 180 degrees */}
-                <TalkingHead rotation={180} />
-                
-                {/* Left - 90 degrees counterclockwise */}
-                <TalkingHead rotation={-90} />
-                
-                {/* Right - 90 degrees clockwise */}
-                <TalkingHead rotation={90} />
-
-                {/* Center ambient glow */}
-                <motion.div
-                  animate={{
-                    scale: [1, 1.3, 1],
-                    opacity: [0.05, 0.15, 0.05],
-                  }}
-                  transition={{ duration: 2, repeat: Infinity }}
-                  className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-96 h-96 rounded-full bg-[hsl(48,100%,50%)] blur-3xl"
-                />
-              </motion.div>
-            ) : (
-              <motion.div
-                key="idle"
-                initial={{ opacity: 0 }}
-                animate={{ opacity: 1 }}
-                exit={{ opacity: 0 }}
-                transition={{ duration: 0.5 }}
-                className="absolute inset-0"
-              >
-                {/* Top - 0 degrees */}
-                <LogoDisplay rotation={0} />
-                
-                {/* Bottom - 180 degrees */}
-                <LogoDisplay rotation={180} />
-                
-                {/* Left - 90 degrees counterclockwise */}
-                <LogoDisplay rotation={-90} />
-                
-                {/* Right - 90 degrees clockwise */}
-                <LogoDisplay rotation={90} />
-              </motion.div>
-            )}
-          </AnimatePresence>
-        </div>
-      </div>
+      {/* Four-sided face display */}
+      <AnimatePresence mode="wait">
+        {!showTalking ? (
+          <motion.div key="logos" className="absolute inset-0">
+            <LogoDisplay rotation={0} />
+            <LogoDisplay rotation={180} />
+            <LogoDisplay rotation={-90} />
+            <LogoDisplay rotation={90} />
+          </motion.div>
+        ) : (
+          <motion.div key="models" className="absolute inset-0">
+            <Model3DDisplay rotation={0} />
+            <Model3DDisplay rotation={180} />
+            <Model3DDisplay rotation={-90} />
+            <Model3DDisplay rotation={90} />
+          </motion.div>
+        )}
+      </AnimatePresence>
     </div>
   );
 }

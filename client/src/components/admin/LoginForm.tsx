@@ -3,6 +3,8 @@ import { useToast } from "@/hooks/use-toast";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { ArrowLeft, MonitorPlay } from "lucide-react";
+import { Link } from "wouter";
 import logoImage from "@assets/image_1760701271607.png";
 
 interface LoginFormProps {
@@ -47,6 +49,29 @@ export function LoginForm({ onLoginSuccess }: LoginFormProps) {
 
   return (
     <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-[hsl(0,75%,10%)] via-[hsl(0,60%,8%)] to-[hsl(48,30%,10%)]">
+      {/* Back buttons - positioned at top */}
+      <div className="absolute top-4 left-4 flex gap-2">
+        <Link href="/">
+          <Button
+            variant="outline"
+            size="icon"
+            className="h-10 w-10 rounded-full bg-gradient-to-br from-[hsl(48,100%,50%)]/10 to-[hsl(0,75%,50%)]/10 border-[hsl(48,100%,50%)]/40 text-[hsl(48,100%,50%)] hover:text-[hsl(48,100%,70%)] hover:bg-[hsl(48,100%,50%)]/20 hover:border-[hsl(48,100%,50%)]/60 transition-all shadow-lg hover:shadow-[hsl(48,100%,50%)]/20 hover:scale-105"
+            title="Back to Home"
+          >
+            <ArrowLeft className="h-5 w-5" />
+          </Button>
+        </Link>
+        <Button
+          variant="outline"
+          size="icon"
+          onClick={() => window.open('/hologram', '_blank', 'width=1200,height=800')}
+          className="h-10 w-10 rounded-full bg-gradient-to-br from-[hsl(280,100%,50%)]/10 to-[hsl(48,100%,50%)]/10 border-[hsl(48,100%,50%)]/40 text-[hsl(48,100%,50%)] hover:text-[hsl(48,100%,70%)] hover:bg-[hsl(48,100%,50%)]/20 hover:border-[hsl(48,100%,50%)]/60 transition-all shadow-lg hover:shadow-[hsl(48,100%,50%)]/20 hover:scale-105"
+          title="Open Hologram Display"
+        >
+          <MonitorPlay className="h-5 w-5" />
+        </Button>
+      </div>
+
       <Card className="w-full max-w-md border-[hsl(48,100%,50%)]">
         <CardHeader className="text-center space-y-4">
           <img src={logoImage} alt="Westmead" className="h-16 mx-auto" />

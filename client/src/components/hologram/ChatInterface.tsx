@@ -5,7 +5,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { cn } from "@/lib/utils";
 
-function TypewriterText({ text, key: messageKey }: { text: string; key: string }) {
+function TypewriterText({ text, key: messageKey, shouldStop }: { text: string; key: string; shouldStop?: boolean }) {
   const [displayedText, setDisplayedText] = useState("");
   const [currentIndex, setCurrentIndex] = useState(0);
   const isMountedRef = useRef(true);
@@ -24,6 +24,17 @@ function TypewriterText({ text, key: messageKey }: { text: string; key: string }
       }
     };
   }, [messageKey, text]);
+
+  // Stop animation immediately when shouldStop prop changes
+  useEffect(() => {
+    if (shouldStop) {
+      isMountedRef.current = false;
+      if (timeoutRef.current) {
+        clearTimeout(timeoutRef.current);
+        timeoutRef.current = null;
+      }
+    }
+  }, [shouldStop]);
 
   useEffect(() => {
     if (!isMountedRef.current || currentIndex >= text.length) return;
@@ -130,7 +141,7 @@ export function ChatInterface({
                   transition={{ duration: 0.5 }}
                 >
                   {!message.isUser ? (
-                    <TypewriterText text={message.text} key={message.id} />
+                    <TypewriterText text={message.text} key={message.id} shouldStop={!isTyping && !isSpeaking} />
                   ) : (
                     message.text
                   )}

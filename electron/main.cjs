@@ -1,4 +1,4 @@
-const { app, BrowserWindow } = require('electron');
+const { app, BrowserWindow, ipcMain } = require('electron');
 const path = require('path');
 const { spawn } = require('child_process');
 const http = require('http');
@@ -53,11 +53,18 @@ function waitForUrl(url, timeout = 120000) {
   });
 }
 
+let hologramWindow = null;
+
 function createWindow() {
+  const iconPath = path.join(__dirname, '..', 'build', 'icon.ico');
+  console.log('Loading icon from:', iconPath);
+  console.log('Icon exists:', require('fs').existsSync(iconPath));
+  
   const win = new BrowserWindow({
     width: 1200,
     height: 800,
-    icon: path.join(__dirname, '..', 'build', 'icon.ico'),
+    fullscreen: true,
+    icon: iconPath,
     webPreferences: {
       nodeIntegration: false,
       contextIsolation: true,
@@ -65,6 +72,42 @@ function createWindow() {
   });
   win.removeMenu();
   win.loadURL('http://localhost:5173');
+  
+  // Handle window.open() for /hologram route
+  win.webContents.setWindowOpenHandler(({ url }) => {
+    console.log('Window open request for:', url);
+    
+    if (url.includes('/hologram')) {
+      // If hologram window already exists, focus it instead of creating new one
+      if (hologramWindow && !hologramWindow.isDestroyed()) {
+        hologramWindow.focus();
+        return { action: 'deny' };
+      }
+      
+      // Create a new window for hologram display
+      hologramWindow = new BrowserWindow({
+        width: 1200,
+        height: 800,
+        fullscreen: true,
+        icon: iconPath,
+        webPreferences: {
+          nodeIntegration: false,
+          contextIsolation: true,
+        },
+      });
+      hologramWindow.removeMenu();
+      hologramWindow.loadURL(url);
+      
+      // Clear reference when window is closed
+      hologramWindow.on('closed', () => {
+        hologramWindow = null;
+      });
+      
+      return { action: 'deny' }; // Prevent default behavior
+    }
+    
+    return { action: 'allow' };
+  });
 }
 
 app.on('ready', async () => {
