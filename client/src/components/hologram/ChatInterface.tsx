@@ -1,79 +1,19 @@
 import { useState, useRef, useEffect } from "react";
 import { motion, AnimatePresence } from "framer-motion";
-import { Send, Mic, MicOff, StopCircle } from "lucide-react";
+import { Send, Mic, MicOff, StopCircle, Trash2, ThumbsUp, ThumbsDown } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { cn } from "@/lib/utils";
-
-function TypewriterText({ text, key: messageKey, shouldStop }: { text: string; key: string; shouldStop?: boolean }) {
-  const [displayedText, setDisplayedText] = useState("");
-  const [currentIndex, setCurrentIndex] = useState(0);
-  const isMountedRef = useRef(true);
-  const timeoutRef = useRef<NodeJS.Timeout | null>(null);
-
-  useEffect(() => {
-    isMountedRef.current = true;
-    setDisplayedText("");
-    setCurrentIndex(0);
-    
-    return () => {
-      isMountedRef.current = false;
-      if (timeoutRef.current) {
-        clearTimeout(timeoutRef.current);
-        timeoutRef.current = null;
-      }
-    };
-  }, [messageKey, text]);
-
-  // Stop animation immediately when shouldStop prop changes
-  useEffect(() => {
-    if (shouldStop) {
-      isMountedRef.current = false;
-      if (timeoutRef.current) {
-        clearTimeout(timeoutRef.current);
-        timeoutRef.current = null;
-      }
-    }
-  }, [shouldStop]);
-
-  useEffect(() => {
-    if (!isMountedRef.current || currentIndex >= text.length) return;
-    
-    timeoutRef.current = setTimeout(() => {
-      if (isMountedRef.current) {
-        setDisplayedText(prev => prev + text[currentIndex]);
-        setCurrentIndex(prev => prev + 1);
-      }
-    }, 30); // Adjust speed here (lower = faster)
-    
-    return () => {
-      if (timeoutRef.current) {
-        clearTimeout(timeoutRef.current);
-        timeoutRef.current = null;
-      }
-    };
-  }, [currentIndex, text]);
-
-  // Split text by newlines and render each line
-  const lines = displayedText.split('\n');
-  
-  return (
-    <>
-      {lines.map((line, index) => (
-        <span key={index}>
-          {line}
-          {index < lines.length - 1 && <br />}
-        </span>
-      ))}
-    </>
-  );
-}
+import { TypewriterText } from "@/components/chat/TypewriterText";
+import { TypingIndicator } from "@/components/chat/LoadingStates";
 
 interface Message {
   id: string;
   text: string;
   isUser: boolean;
   timestamp: Date;
+  queryId?: string;
+  rating?: 'positive' | 'negative';
 }
 
 interface ChatInterfaceProps {
@@ -84,6 +24,8 @@ interface ChatInterfaceProps {
   onToggleListening: () => void;
   isSpeaking: boolean;
   onStop: () => void;
+  onClearChat: () => void;
+  onFeedback: (messageId: string, rating: 'positive' | 'negative') => void;
 }
 
 export function ChatInterface({
@@ -94,8 +36,12 @@ export function ChatInterface({
   onToggleListening,
   isSpeaking,
   onStop,
+  onClearChat,
+  onFeedback,
 }: ChatInterfaceProps) {
   const [input, setInput] = useState("");
+  const [ratedMessages, setRatedMessages] = useState<Set<string>>(new Set());
+  const [completedTyping, setCompletedTyping] = useState<Set<string>>(new Set());
   const messagesEndRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -126,29 +72,84 @@ export function ChatInterface({
                 message.isUser ? "justify-end" : "justify-start"
               )}
             >
-              <div
-                className={cn(
-                  "max-w-[90%] sm:max-w-[80%] rounded-2xl px-3 sm:px-4 py-2 sm:py-3",
-                  message.isUser
-                    ? "bg-[hsl(0,75%,25%)] text-[hsl(45,30%,98%)]"
-                    : "border-2 border-[hsl(48,100%,50%)] bg-transparent backdrop-blur-sm text-[hsl(45,30%,98%)]"
-                )}
-              >
-                <motion.p 
-                  className="text-sm sm:text-lg font-medium leading-relaxed tracking-wide overflow-hidden"
-                  initial={{ opacity: 0 }}
-                  animate={{ opacity: 1 }}
-                  transition={{ duration: 0.5 }}
-                >
-                  {!message.isUser ? (
-                    <TypewriterText text={message.text} key={message.id} shouldStop={!isTyping && !isSpeaking} />
-                  ) : (
-                    message.text
+              <div className="flex flex-col gap-2">
+                <div
+                  className={cn(
+                    "max-w-[90%] sm:max-w-[80%] rounded-2xl px-3 sm:px-4 py-2 sm:py-3",
+                    message.isUser
+                      ? "bg-[hsl(0,75%,25%)] text-[hsl(45,30%,98%)]"
+                      : "border-2 border-[hsl(48,100%,50%)] bg-transparent backdrop-blur-sm text-[hsl(45,30%,98%)]"
                   )}
-                </motion.p>
-                <p className="text-xs opacity-60 mt-1">
-                  {message.timestamp.toLocaleTimeString()}
-                </p>
+                >
+                  <motion.div 
+                    key={message.id}
+                    className="text-sm sm:text-lg font-medium leading-loose tracking-wide whitespace-pre-wrap break-words"
+                    initial={{ opacity: 0 }}
+                    animate={{ opacity: 1 }}
+                    transition={{ duration: 0.5 }}
+                  >
+                    {!message.isUser ? (
+                      <TypewriterText 
+                        text={message.text} 
+                        shouldStop={!isTyping && !isSpeaking}
+                        onComplete={() => setCompletedTyping(prev => new Set(prev).add(message.id))}
+                      />
+                    ) : (
+                      message.text
+                    )}
+                  </motion.div>
+                  <p className="text-xs opacity-60 mt-1">
+                    {message.timestamp.toLocaleTimeString()}
+                  </p>
+                </div>
+                
+                {/* Feedback buttons for AI messages - only show after typing completes */}
+                {!message.isUser && !ratedMessages.has(message.id) && completedTyping.has(message.id) && (
+                  <motion.div 
+                    initial={{ opacity: 0, y: -10 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    className="flex gap-2 ml-2 items-center"
+                  >
+                    <span className="text-xs text-[hsl(48,100%,50%)] mr-1">Was this helpful?</span>
+                    <Button
+                      size="sm"
+                      variant="ghost"
+                      className="h-8 px-3 border border-[hsl(48,100%,50%)] text-[hsl(48,100%,50%)] hover:bg-[hsl(48,100%,50%)] hover:text-[hsl(0,75%,25%)]"
+                      onClick={() => {
+                        onFeedback(message.id, 'positive');
+                        setRatedMessages(prev => new Set(prev).add(message.id));
+                      }}
+                      title="Helpful"
+                    >
+                      <ThumbsUp className="w-4 h-4 mr-1" />
+                      <span className="text-xs">Yes</span>
+                    </Button>
+                    <Button
+                      size="sm"
+                      variant="ghost"
+                      className="h-8 px-3 border border-red-400 text-red-400 hover:bg-red-500 hover:text-white hover:border-red-500"
+                      onClick={() => {
+                        onFeedback(message.id, 'negative');
+                        setRatedMessages(prev => new Set(prev).add(message.id));
+                      }}
+                      title="Not helpful"
+                    >
+                      <ThumbsDown className="w-4 h-4 mr-1" />
+                      <span className="text-xs">No</span>
+                    </Button>
+                  </motion.div>
+                )}
+                
+                {/* Show feedback confirmation */}
+                {!message.isUser && ratedMessages.has(message.id) && (
+                  <motion.div
+                    initial={{ opacity: 0 }}
+                    animate={{ opacity: 1 }}
+                    className="flex gap-2 ml-2 items-center text-xs text-[hsl(48,100%,50%)] opacity-70"
+                  >
+                    ✓ Thank you for your feedback!
+                  </motion.div>
+                )}
               </div>
             </motion.div>
           ))}
@@ -162,23 +163,7 @@ export function ChatInterface({
             className="flex justify-start"
           >
             <div className="border-2 border-[hsl(48,100%,50%)] bg-transparent backdrop-blur-sm rounded-2xl px-4 py-3">
-              <div className="flex gap-1">
-                <motion.div
-                  className="w-2 h-2 rounded-full bg-[hsl(48,100%,50%)]"
-                  animate={{ opacity: [0.3, 1, 0.3] }}
-                  transition={{ duration: 1.4, repeat: Infinity }}
-                />
-                <motion.div
-                  className="w-2 h-2 rounded-full bg-[hsl(48,100%,50%)]"
-                  animate={{ opacity: [0.3, 1, 0.3] }}
-                  transition={{ duration: 1.4, repeat: Infinity, delay: 0.2 }}
-                />
-                <motion.div
-                  className="w-2 h-2 rounded-full bg-[hsl(48,100%,50%)]"
-                  animate={{ opacity: [0.3, 1, 0.3] }}
-                  transition={{ duration: 1.4, repeat: Infinity, delay: 0.4 }}
-                />
-              </div>
+              <TypingIndicator />
             </div>
           </motion.div>
         )}
@@ -188,6 +173,20 @@ export function ChatInterface({
 
       {/* Input area */}
       <div className="border-t border-[hsl(48,100%,50%)] bg-[hsl(0,60%,8%)] p-2 sm:p-4">
+        <div className="flex gap-2 mb-2">
+          {messages.length > 0 && (
+            <Button
+              type="button"
+              size="sm"
+              variant="outline"
+              onClick={onClearChat}
+              className="text-xs hover:bg-red-500 hover:text-white hover:border-red-500"
+            >
+              <Trash2 className="w-3 h-3 mr-1" />
+              Clear Chat
+            </Button>
+          )}
+        </div>
         <form onSubmit={handleSubmit} className="flex gap-1.5 sm:gap-2">
           <Input
             value={input}
@@ -207,6 +206,7 @@ export function ChatInterface({
               isListening && "bg-[hsl(48,100%,50%)] text-[hsl(0,75%,25%)] animate-pulse"
             )}
             data-testid="button-voice-input"
+            title={isListening ? "Stop listening" : "Start voice input"}
           >
             {isListening ? <Mic className="w-4 h-4 sm:w-5 sm:h-5" /> : <MicOff className="w-4 h-4 sm:w-5 sm:h-5" />}
           </Button>

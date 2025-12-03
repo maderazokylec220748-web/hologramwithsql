@@ -7,6 +7,7 @@ import { QueryDashboard } from "@/components/admin/QueryDashboard";
 import { FaqManager } from "@/components/admin/FaqManager";
 import { UserManager } from "@/components/admin/UserManager";
 import { LoginForm } from "@/components/admin/LoginForm";
+import { AnalyticsDashboard } from "@/pages/AnalyticsDashboard";
 import { useToast } from "@/hooks/use-toast";
 import logoImage from "@assets/image_1760701271607.png";
 
@@ -113,7 +114,12 @@ export default function Admin() {
       {/* Main Content */}
       <div className="container mx-auto px-3 sm:px-6 py-4 sm:py-8">
         <Tabs value={activeTab} onValueChange={setActiveTab}>
-          <TabsList className="grid w-full max-w-md grid-cols-3 mb-4 sm:mb-8">
+          <TabsList className="grid w-full max-w-2xl grid-cols-4 mb-4 sm:mb-8">
+            <TabsTrigger value="analytics" className="gap-1 sm:gap-2 text-xs sm:text-sm" data-testid="tab-analytics">
+              <BarChart3 className="w-4 h-4" />
+              <span className="hidden sm:inline">Analytics</span>
+              <span className="sm:hidden">Stats</span>
+            </TabsTrigger>
             <TabsTrigger value="queries" className="gap-1 sm:gap-2 text-xs sm:text-sm" data-testid="tab-queries">
               <BarChart3 className="w-4 h-4" />
               <span className="hidden sm:inline">Queries</span>
@@ -128,6 +134,10 @@ export default function Admin() {
               Users
             </TabsTrigger>
           </TabsList>
+
+          <TabsContent value="analytics" className="mt-0">
+            <AnalyticsDashboard />
+          </TabsContent>
 
           <TabsContent value="queries" className="mt-0">
             <QueryDashboard />

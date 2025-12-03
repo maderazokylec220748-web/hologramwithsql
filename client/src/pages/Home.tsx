@@ -13,6 +13,8 @@ interface Message {
   text: string;
   isUser: boolean;
   timestamp: Date;
+  queryId?: string;
+  rating?: 'positive' | 'negative';
 }
 
 export default function Home() {
@@ -171,6 +173,7 @@ export default function Home() {
         text: data.answer,
         isUser: false,
         timestamp: new Date(),
+        queryId: data.queryId,
       };
       
       // Check one more time before displaying
@@ -278,9 +281,6 @@ export default function Home() {
   const handleStop = () => {
     console.log(`Stopping current request: ${currentRequestIdRef.current}`);
     
-    // Don't clear the request ID - keep it so responses are still rejected
-    // Just mark typing as false so we know to remove message
-    
     // Abort ongoing fetch request
     if (abortControllerRef.current) {
       abortControllerRef.current.abort();
@@ -296,19 +296,7 @@ export default function Home() {
     // Force stop speech synthesis immediately
     forceStopSpeech();
     
-    // Remove any incomplete AI messages
-    if (isTypingRef.current) {
-      console.log("Removing incomplete AI message due to stop");
-      setMessages((prev) => {
-        // Remove last message if it's an incomplete AI response
-        if (prev.length > 0 && !prev[prev.length - 1].isUser) {
-          return prev.slice(0, -1);
-        }
-        return prev;
-      });
-    }
-    
-    // Reset all states immediately
+    // Reset all states immediately - this will trigger shouldStop in TypewriterText
     setIsSpeaking(false);
     setIsTyping(false);
     broadcastToHologram(false);
@@ -374,6 +362,38 @@ export default function Home() {
       }
     } else {
       setIsListening(false);
+    }
+  };
+
+  const handleClearChat = () => {
+    if (window.confirm('Are you sure you want to clear the chat history?')) {
+      setMessages([]);
+      setIsIdle(true);
+      // Stop any ongoing operations
+      handleStop();
+    }
+  };
+
+  const handleFeedback = async (messageId: string, rating: 'positive' | 'negative') => {
+    try {
+      const message = messages.find(m => m.id === messageId);
+      if (!message || !message.queryId) return;
+
+      await fetch('/api/feedback', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          queryId: message.queryId,
+          rating,
+        }),
+      });
+
+      // Update message with rating
+      setMessages(prev => prev.map(m => 
+        m.id === messageId ? { ...m, rating } : m
+      ));
+    } catch (error) {
+      console.error('Failed to submit feedback:', error);
     }
   };
 
@@ -453,6 +473,8 @@ export default function Home() {
                       onToggleListening={handleToggleListening}
                       isSpeaking={isSpeaking}
                       onStop={handleStop}
+                      onClearChat={handleClearChat}
+                      onFeedback={handleFeedback}
                     />
                   </div>
                 )}

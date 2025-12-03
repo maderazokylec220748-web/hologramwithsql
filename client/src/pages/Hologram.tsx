@@ -2,10 +2,14 @@ import { useState, useEffect } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import logoImage from "@assets/westmead-removebg-preview_1760715284367.png";
 import { GLBModel } from "@/components/hologram/GLBModel";
+import { Button } from "@/components/ui/button";
+import { Pause, Play, X } from "lucide-react";
 
 export default function Hologram() {
   const [isSpeaking, setIsSpeaking] = useState(false);
   const [showTalking, setShowTalking] = useState(false);
+  const [isPaused, setIsPaused] = useState(false);
+  const [showControls, setShowControls] = useState(false);
 
   useEffect(() => {
     const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
@@ -277,11 +281,56 @@ export default function Hologram() {
     </div>
   );
 
+  const handleTogglePause = () => {
+    setIsPaused(!isPaused);
+  };
+
+  const handleClose = () => {
+    if (window.confirm('Close hologram display?')) {
+      window.close();
+    }
+  };
+
   return (
-    <div className="relative w-full h-screen bg-black overflow-hidden">
+    <div 
+      className="relative w-full h-screen bg-black overflow-hidden"
+      onMouseEnter={() => setShowControls(true)}
+      onMouseLeave={() => setShowControls(false)}
+    >
+      {/* Control buttons */}
+      <AnimatePresence>
+        {showControls && (
+          <motion.div
+            initial={{ opacity: 0, y: -20 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0, y: -20 }}
+            className="absolute top-4 right-4 z-50 flex gap-2"
+          >
+            <Button
+              size="sm"
+              variant="outline"
+              onClick={handleTogglePause}
+              className="bg-black/50 border-[hsl(48,100%,50%)] text-[hsl(48,100%,50%)] hover:bg-[hsl(48,100%,50%)] hover:text-black backdrop-blur-sm"
+              title={isPaused ? "Resume" : "Pause"}
+            >
+              {isPaused ? <Play className="w-4 h-4" /> : <Pause className="w-4 h-4" />}
+            </Button>
+            <Button
+              size="sm"
+              variant="outline"
+              onClick={handleClose}
+              className="bg-black/50 border-red-500 text-red-500 hover:bg-red-500 hover:text-white backdrop-blur-sm"
+              title="Close"
+            >
+              <X className="w-4 h-4" />
+            </Button>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
       {/* Four-sided face display */}
       <AnimatePresence mode="wait">
-        {!showTalking ? (
+        {!showTalking || isPaused ? (
           <motion.div key="logos" className="absolute inset-0">
             <LogoDisplay rotation={0} />
             <LogoDisplay rotation={180} />
@@ -297,6 +346,15 @@ export default function Hologram() {
           </motion.div>
         )}
       </AnimatePresence>
+      
+      {/* Pause indicator */}
+      {isPaused && (
+        <div className="absolute inset-0 flex items-center justify-center bg-black/50 backdrop-blur-sm z-40">
+          <div className="text-[hsl(48,100%,50%)] text-4xl font-bold animate-pulse">
+            PAUSED
+          </div>
+        </div>
+      )}
     </div>
   );
 }

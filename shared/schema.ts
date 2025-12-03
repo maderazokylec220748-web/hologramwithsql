@@ -37,6 +37,34 @@ export const faqs = mysqlTable("faqs", {
   updatedAt: timestamp("updated_at").notNull().defaultNow(),
 });
 
+// Chat history table - stores individual chat messages
+export const chatHistory = mysqlTable("chat_history", {
+  id: varchar("id", { length: 36 }).primaryKey(),
+  queryId: varchar("query_id", { length: 36 }), // References queries table
+  message: text("message").notNull(),
+  isUser: boolean("is_user").notNull(), // true if user message, false if AI response
+  createdAt: timestamp("created_at").notNull().defaultNow(),
+});
+
+// Analytics events table - stores all user interactions
+export const analyticsEvents = mysqlTable("analytics_events", {
+  id: varchar("id", { length: 36 }).primaryKey(),
+  eventType: text("event_type").notNull(), // chat_query, feedback, interaction, etc.
+  eventData: text("event_data"), // JSON string of event details
+  sessionId: varchar("session_id", { length: 36 }),
+  userType: text("user_type"), // visitor, student, parent
+  createdAt: timestamp("created_at").notNull().defaultNow(),
+});
+
+// Feedback table - stores user feedback on queries
+export const feedback = mysqlTable("feedback", {
+  id: varchar("id", { length: 36 }).primaryKey(),
+  queryId: varchar("query_id", { length: 36 }).notNull(), // References queries table
+  rating: text("rating").notNull(), // positive or negative
+  comment: text("comment"), // optional user comment
+  createdAt: timestamp("created_at").notNull().defaultNow(),
+});
+
 // Insert schemas with enhanced validation
 export const insertAdminUserSchema = createInsertSchema(adminUsers).omit({
   id: true,
@@ -118,3 +146,11 @@ export type InsertQuery = z.infer<typeof insertQuerySchema>;
 
 export type Faq = typeof faqs.$inferSelect;
 export type InsertFaq = z.infer<typeof insertFaqSchema>;
+
+export type ChatHistory = typeof chatHistory.$inferSelect;
+
+export type AnalyticsEvent = typeof analyticsEvents.$inferSelect;
+
+export type Feedback = typeof feedback.$inferSelect;
+
+export type ChatHistory = typeof chatHistory.$inferSelect;

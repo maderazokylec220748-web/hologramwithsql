@@ -71,7 +71,7 @@ export function AvatarDisplay({ isSpeaking, isMuted, onToggleMute }: AvatarDispl
         className="mt-3 sm:mt-4 px-3 sm:px-4 py-1.5 sm:py-2 rounded-full bg-[hsl(0,75%,25%)] border border-[hsl(48,100%,50%)] backdrop-blur-sm"
       >
         <p className="text-xs sm:text-sm font-semibold text-[hsl(48,100%,50%)] tracking-wide">
-          WIS AI Assistant
+          W.I.S. AI - Where Intelligence Starts
         </p>
       </motion.div>
 

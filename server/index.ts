@@ -5,6 +5,7 @@ import { WebSocketServer } from 'ws';
 import { createServer } from 'http';
 import cors from 'cors';
 import helmet from 'helmet';
+import { scheduleCleanup } from './cleanup';
 
 const app = express();
 
@@ -110,5 +111,9 @@ app.use((req, res, next) => {
   const port = parseInt(process.env.PORT || '5000', 10);
   server.listen(port, () => {
     log(`serving on port ${port}`);
+    
+    // Schedule daily cleanup of old chat logs
+    scheduleCleanup();
+    log('Scheduled daily cleanup of old chat history (30+ days)');
   });
 })();

@@ -68,9 +68,14 @@ function createWindow() {
     webPreferences: {
       nodeIntegration: false,
       contextIsolation: true,
+      cache: false, // Disable cache in development
     },
   });
   win.removeMenu();
+  
+  // Clear cache before loading
+  win.webContents.session.clearCache();
+  
   win.loadURL('http://localhost:5173');
   
   // Handle window.open() for /hologram route

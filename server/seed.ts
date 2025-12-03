@@ -61,6 +61,30 @@ async function seed() {
       console.log("✓ FAQs already exist");
     }
 
+    // Create some sample queries for analytics
+    const existingQueries = await storage.getAllQueries();
+    
+    if (existingQueries.length === 0) {
+      const sampleQueries = [
+        { question: "How do I apply?", answer: "Visit our admissions office...", userType: "visitor", category: "admissions", responseTime: 850 },
+        { question: "What programs do you offer?", answer: "We offer programs from...", userType: "parent", category: "academic", responseTime: 920 },
+        { question: "What are the tuition fees?", answer: "Our tuition fees vary...", userType: "parent", category: "admissions", responseTime: 780 },
+        { question: "Where is the school located?", answer: "We are located in Batangas City...", userType: "visitor", category: "general", responseTime: 650 },
+        { question: "Do you offer scholarships?", answer: "Yes, we offer various scholarships...", userType: "student", category: "scholarships", responseTime: 890 },
+        { question: "How do I apply?", answer: "Visit our admissions office...", userType: "visitor", category: "admissions", responseTime: 820 },
+        { question: "What programs do you offer?", answer: "We offer programs from...", userType: "visitor", category: "academic", responseTime: 900 },
+        { question: "What are the school hours?", answer: "Regular classes are from...", userType: "student", category: "general", responseTime: 700 },
+      ];
+
+      for (const query of sampleQueries) {
+        await storage.createQuery(query);
+      }
+
+      console.log("✓ Sample queries created for analytics");
+    } else {
+      console.log("✓ Queries already exist");
+    }
+
     console.log("Seeding completed successfully!");
     process.exit(0);
   } catch (error) {

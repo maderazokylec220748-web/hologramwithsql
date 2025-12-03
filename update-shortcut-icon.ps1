@@ -29,7 +29,7 @@ if (Test-Path $shortcutPath) {
     $shortcut.TargetPath = "C:\Users\USER\hologramsql-main\Start WIS AI Assistant.bat"
     $shortcut.WorkingDirectory = "C:\Users\USER\hologramsql-main"
     $shortcut.IconLocation = $iconPath
-    $shortcut.Description = "WIS AI Assistant - Westmead Hologram System"
+    $shortcut.Description = "W.I.S. AI - Where Intelligence Starts - Westmead Hologram System"
     $shortcut.Save()
     
     Write-Host "✅ New desktop shortcut created with Westmead logo!" -ForegroundColor Green

@@ -8,6 +8,8 @@ import { insertQuerySchema, insertFaqSchema, insertAdminUserSchema } from "@shar
 import { sessionMiddleware, requireAuth, requireAdmin } from "./auth";
 import bcrypt from "bcryptjs";
 import rateLimit from "express-rate-limit";
+import { responseCache } from "./cache";
+import { analytics } from "./analytics";
 
 // Rate limiters for different endpoints
 const loginLimiter = rateLimit({
@@ -111,6 +113,18 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return res.status(400).json({ error: "Question is required" });
       }
 
+      // Check cache first
+      const cached = responseCache.get(question);
+      if (cached) {
+        console.log(`Cache hit for question: ${question.substring(0, 50)}...`);
+        return res.json({
+          answer: cached.answer,
+          speechText: cached.speechText,
+          category: 'cached',
+          cached: true,
+        });
+      }
+
       const startTime = Date.now();
       
       // Get AI response from Grok
@@ -136,15 +150,75 @@ export async function registerRoutes(app: Express): Promise<Server> {
       // Prepare text for speech
       const speechText = prepareTextForSpeech(answer);
 
+      // Cache the response
+      responseCache.set(question, answer, speechText);
+
+      // Track analytics
+      analytics.trackQuery(question, category, userType, responseTime);
+
       res.json({
         answer,
         speechText,
         category,
         queryId: query.id,
+        cached: false,
       });
     } catch (error) {
       console.error("Chat error:", error);
       res.status(500).json({ error: "Failed to process chat request" });
+    }
+  });
+
+  // Feedback endpoint - rate AI responses
+  app.post("/api/feedback", generalApiLimiter, async (req, res) => {
+    try {
+      const { queryId, rating, comment } = req.body;
+      
+      if (!queryId || !rating) {
+        return res.status(400).json({ error: "Query ID and rating are required" });
+      }
+
+      if (rating !== 'positive' && rating !== 'negative') {
+        return res.status(400).json({ error: "Rating must be 'positive' or 'negative'" });
+      }
+
+      // Track analytics
+      analytics.trackFeedback(queryId, rating);
+      
+      // Store feedback (you can add a feedback table later)
+      console.log(`Feedback received for query ${queryId}: ${rating}`, comment ? `Comment: ${comment}` : '');
+      
+      // For now, just acknowledge
+      res.json({ success: true, message: 'Thank you for your feedback!' });
+    } catch (error) {
+      console.error("Feedback error:", error);
+      res.status(500).json({ error: "Failed to submit feedback" });
+    }
+  });
+
+  // Clear chat history for session
+  app.delete("/api/chat/clear", generalApiLimiter, (req, res) => {
+    try {
+      // This is a client-side operation, just acknowledge
+      res.json({ success: true, message: 'Chat history cleared' });
+    } catch (error) {
+      console.error("Clear chat error:", error);
+      res.status(500).json({ error: "Failed to clear chat" });
+    }
+  });
+
+  // Admin - Get analytics stats
+  app.get("/api/admin/analytics", requireAuth, generalApiLimiter, async (req, res) => {
+    try {
+      const { startDate, endDate } = req.query;
+      const start = startDate ? new Date(startDate as string) : undefined;
+      const end = endDate ? new Date(endDate as string) : undefined;
+      
+      const stats = await analytics.getStats(start, end);
+      res.json(stats);
+    } catch (error) {
+      console.error("Get analytics error:", error);
+      res.status(500).json({ error: "Failed to fetch analytics" });
     }
   });
 
