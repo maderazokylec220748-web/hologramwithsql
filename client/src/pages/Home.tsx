@@ -18,7 +18,39 @@ interface Message {
 }
 
 export default function Home() {
-  const [messages, setMessages] = useState<Message[]>([]);
+  // Load messages from localStorage on mount with expiration check
+  const [messages, setMessages] = useState<Message[]>(() => {
+    try {
+      const saved = localStorage.getItem('chatMessages');
+      const sessionStart = localStorage.getItem('chatSessionStart');
+      
+      if (saved && sessionStart) {
+        const sessionAge = Date.now() - parseInt(sessionStart);
+        const ONE_HOUR = 60 * 60 * 1000;
+        
+        // Clear messages older than 1 hour for privacy
+        if (sessionAge > ONE_HOUR) {
+          console.log('🔒 Chat session expired (>1 hour), clearing for privacy');
+          localStorage.removeItem('chatMessages');
+          localStorage.removeItem('chatSessionStart');
+          return [];
+        }
+        
+        const parsed = JSON.parse(saved);
+        // Convert timestamp strings back to Date objects
+        return parsed.map((msg: any) => ({
+          ...msg,
+          timestamp: new Date(msg.timestamp)
+        }));
+      }
+    } catch (error) {
+      console.error('Error loading messages from localStorage:', error);
+      localStorage.removeItem('chatMessages');
+      localStorage.removeItem('chatSessionStart');
+    }
+    return [];
+  });
+  
   const [isTyping, setIsTyping] = useState(false);
   const [isSpeaking, setIsSpeaking] = useState(false);
   const [isMuted, setIsMuted] = useState(false);
@@ -31,6 +63,25 @@ export default function Home() {
   const utteranceRef = useRef<SpeechSynthesisUtterance | null>(null);
   const currentRequestIdRef = useRef<string | null>(null);
   const isTypingRef = useRef<boolean>(false);
+
+  // Save messages to localStorage whenever they change (with 1-hour retention)
+  useEffect(() => {
+    try {
+      if (messages.length > 0) {
+        localStorage.setItem('chatMessages', JSON.stringify(messages));
+        // Track session start for expiration
+        if (!localStorage.getItem('chatSessionStart')) {
+          localStorage.setItem('chatSessionStart', Date.now().toString());
+        }
+        console.log(`💾 Saved ${messages.length} messages (1-hour retention for privacy)`);
+      } else {
+        localStorage.removeItem('chatMessages');
+        localStorage.removeItem('chatSessionStart');
+      }
+    } catch (error) {
+      console.error('Error saving messages to localStorage:', error);
+    }
+  }, [messages]);
 
   // WebSocket connection for hologram sync
   useEffect(() => {
@@ -63,7 +114,7 @@ export default function Home() {
     }
   };
 
-  // Reset to idle after 5 minutes of inactivity
+  // Reset to idle after 10 minutes of inactivity (privacy protection)
   const resetIdleTimer = useCallback(() => {
     if (idleTimeout) clearTimeout(idleTimeout);
     setIsIdle(false);
@@ -71,7 +122,10 @@ export default function Home() {
     const timeout = setTimeout(() => {
       setIsIdle(true);
       setMessages([]);
-    }, 300000);
+      localStorage.removeItem('chatMessages');
+      localStorage.removeItem('chatSessionStart');
+      console.log('🔒 Chat cleared due to inactivity (privacy protection)');
+    }, 600000); // 10 minutes
     
     setIdleTimeout(timeout);
   }, [idleTimeout]);
@@ -100,6 +154,7 @@ export default function Home() {
     if (abortControllerRef.current) {
       console.log(`[${requestId}] Aborting previous request`);
       abortControllerRef.current.abort();
+      abortControllerRef.current = null;
     }
     if (speechTimeoutRef.current) {
       clearTimeout(speechTimeoutRef.current);
@@ -107,20 +162,23 @@ export default function Home() {
     }
     forceStopSpeech();
     setIsSpeaking(false);
-    setIsTyping(false);
     broadcastToHologram(false);
     
-    // Remove any incomplete AI messages from previous request
-    // (messages that are still being typed out)
-    setMessages((prev) => {
-      // Keep only user messages and complete AI messages
-      // Remove the last message if it's an AI message and we were typing
-      if (prev.length > 0 && !prev[prev.length - 1].isUser && isTypingRef.current) {
-        console.log(`[${requestId}] Removing incomplete AI message`);
-        return prev.slice(0, -1);
-      }
-      return prev;
-    });
+    // Only remove incomplete AI messages (still typing)
+    // Keep completed messages to preserve conversation history
+    if (isTyping || isSpeaking) {
+      setMessages((prev) => {
+        // Remove the last message if it's an AI message AND we're still processing
+        if (prev.length > 0 && !prev[prev.length - 1].isUser) {
+          console.log(`[${requestId}] Removing incomplete AI message from previous request`);
+          return prev.slice(0, -1);
+        }
+        return prev;
+      });
+    }
+    
+    // Reset typing state AFTER cleaning up messages
+    setIsTyping(false);
     
     const userMessage: Message = {
       id: requestId,
@@ -136,6 +194,8 @@ export default function Home() {
     abortControllerRef.current = new AbortController();
 
     try {
+      console.log(`[${requestId}] Sending request to /api/chat`);
+      
       // Call the chat API
       const response = await fetch("/api/chat", {
         method: "POST",
@@ -144,68 +204,52 @@ export default function Home() {
         signal: abortControllerRef.current.signal,
       });
 
-      if (!response.ok) throw new Error("Failed to get response");
+      console.log(`[${requestId}] Response received, status: ${response.status}`);
+
+      if (!response.ok) {
+        console.error(`[${requestId}] Response not OK: ${response.status}`);
+        throw new Error("Failed to get response");
+      }
 
       const data = await response.json();
+      console.log(`[${requestId}] Data parsed successfully, answer length: ${data.answer?.length || 0}`);
       
-      // CRITICAL: Check if this is still the current request
-      // If user sent new question, currentRequestIdRef will be new ID
-      console.log(`[${requestId}] Got response, current request: ${currentRequestIdRef.current}`);
-      if (currentRequestIdRef.current !== requestId) {
-        console.log(`[${requestId}] DISCARDING - Response is from old request (current: ${currentRequestIdRef.current})`);
-        setIsTyping(false);
-        setIsSpeaking(false);
-        return;
-      }
-      
-      console.log(`[${requestId}] Processing response`);
-      
-      // CRITICAL: Check AGAIN before creating message
-      if (currentRequestIdRef.current !== requestId) {
-        console.log(`[${requestId}] DISCARDING - Newer request exists before message creation`);
-        setIsTyping(false);
-        setIsSpeaking(false);
-        return;
-      }
-      
+      // Create AI message
       const aiMessage: Message = {
-        id: (Date.now() + 1).toString(),
-        text: data.answer,
+        id: `ai-${requestId}`,
+        text: data.answer || "I apologize, but I couldn't generate a response.",
         isUser: false,
         timestamp: new Date(),
         queryId: data.queryId,
       };
       
-      // Check one more time before displaying
-      if (currentRequestIdRef.current !== requestId) {
-        console.log(`[${requestId}] DISCARDING - Newer request exists before display`);
-        setIsTyping(false);
-        setIsSpeaking(false);
-        return;
-      }
-      
-      console.log(`[${requestId}] Adding message to display`);
+      console.log(`[${requestId}] Adding AI message to display`);
       setMessages((prev) => [...prev, aiMessage]);
       setIsTyping(false);
       setIsSpeaking(true);
-      
-      // Check before broadcasting
-      if (currentRequestIdRef.current !== requestId) {
-        console.log(`[${requestId}] DISCARDING - Newer request exists before broadcast - removing message`);
-        setIsSpeaking(false);
-        // Remove the message we just added
-        setMessages((prev) => prev.filter(m => m.id !== aiMessage.id));
-        return;
-      }
       
       // Broadcast to hologram that AI is speaking
       broadcastToHologram(true, data.answer);
 
       // Text-to-speech
-      if (!isMuted && 'speechSynthesis' in window && currentRequestIdRef.current === requestId) {
+      if (!isMuted && 'speechSynthesis' in window) {
         const utterance = new SpeechSynthesisUtterance(data.speechText || data.answer);
+        
+        // Select a male voice
+        const voices = window.speechSynthesis.getVoices();
+        const maleVoice = voices.find(voice => 
+          voice.name.includes('Male') || 
+          voice.name.includes('David') || 
+          voice.name.includes('Mark') ||
+          voice.name.includes('Guy') ||
+          (voice.lang.startsWith('en') && !voice.name.includes('Female') && !voice.name.includes('Zira'))
+        );
+        if (maleVoice) {
+          utterance.voice = maleVoice;
+        }
+        
         utterance.rate = 0.9;
-        utterance.pitch = 1.0;
+        utterance.pitch = 0.9; // Lower pitch for more masculine sound
         utterance.onend = () => {
           utteranceRef.current = null;
           setIsSpeaking(false);
@@ -220,12 +264,10 @@ export default function Home() {
         window.speechSynthesis.speak(utterance);
       } else {
         // If no speech, just show speaking animation for message length
-        const duration = Math.min(data.answer.length * 50, 5000);
+        const duration = Math.min((data.answer?.length || 100) * 50, 5000);
         speechTimeoutRef.current = setTimeout(() => {
-          if (currentRequestIdRef.current === requestId) {
-            setIsSpeaking(false);
-            broadcastToHologram(false);
-          }
+          setIsSpeaking(false);
+          broadcastToHologram(false);
           speechTimeoutRef.current = null;
         }, duration);
       }
@@ -237,15 +279,9 @@ export default function Home() {
         return;
       }
       
-      // Don't show error if this is not the current request
-      if (currentRequestIdRef.current !== requestId) {
-        console.log(`[${requestId}] Error in old request - ignoring`);
-        return;
-      }
-      
-      console.error("Chat error:", error);
+      console.error(`[${requestId}] Chat error:`, error);
       const errorMessage: Message = {
-        id: (Date.now() + 1).toString(),
+        id: `error-${requestId}`,
         text: "I apologize, but I'm having trouble connecting right now. Please try again.",
         isUser: false,
         timestamp: new Date(),
@@ -368,6 +404,8 @@ export default function Home() {
   const handleClearChat = () => {
     if (window.confirm('Are you sure you want to clear the chat history?')) {
       setMessages([]);
+      localStorage.removeItem('chatMessages');
+      console.log('🗑️ Chat history cleared from localStorage');
       setIsIdle(true);
       // Stop any ongoing operations
       handleStop();

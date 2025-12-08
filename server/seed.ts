@@ -5,28 +5,20 @@ async function seed() {
   try {
     console.log("Seeding database...");
 
-    // Check if admin already exists
-    const existingAdmin = await storage.getAdminUserByUsername("admin");
-    
-    if (!existingAdmin) {
-      // Create default admin user
-      const hashedPassword = await bcrypt.hash("admin123", 10);
-      
-      await storage.createAdminUser({
-        username: "admin",
-        password: hashedPassword,
-        fullName: "System Administrator",
-        email: "admin@westmead-is.edu.ph",
-        role: "admin",
-      });
-
-      console.log("✓ Default admin user created");
-      console.log("  Username: admin");
-      console.log("  Password: admin123");
-      console.log("  ⚠️  Please change this password after first login!");
-    } else {
-      console.log("✓ Admin user already exists");
-    }
+    // ⚠️ SECURITY: Default admin credentials removed
+    // Create your first admin user manually using one of these methods:
+    // 
+    // Method 1: Use the generate-hash script
+    //   node scripts/generate-hash.js YourSecurePassword123!
+    //   Then run the generated SQL command in MySQL
+    //
+    // Method 2: Direct SQL (replace with your values)
+    //   First generate hash: node -e "console.log(require('bcryptjs').hashSync('YourPassword', 10))"
+    //   Then: INSERT INTO admin_users (id, username, password, role, full_name, email) 
+    //         VALUES (UUID(), 'yourusername', 'HASH_FROM_ABOVE', 'admin', 'Your Name', 'your@email.com');
+    //
+    console.log("⚠️  No default admin user - create one manually for security");
+    console.log("   Run: node scripts/generate-hash.js YourPassword");
 
     // Create some sample FAQs
     const existingFaqs = await storage.getAllFaqs();

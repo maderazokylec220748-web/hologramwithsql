@@ -52,6 +52,7 @@ export class DatabaseStorage implements IStorage {
     const id = randomUUID();
     const userWithId = { ...insertUser, id };
     await db.insert(adminUsers).values(userWithId);
+    console.log(`[DB] ✅ Admin user saved to database - ID: ${id}, Username: ${insertUser.username}`);
     const [user] = await db.select().from(adminUsers).where(eq(adminUsers.id, id));
     return user;
   }
@@ -62,6 +63,7 @@ export class DatabaseStorage implements IStorage {
 
   async deleteAdminUser(id: string): Promise<void> {
     await db.delete(adminUsers).where(eq(adminUsers.id, id));
+    console.log(`[DB] ✅ Admin user deleted from database - ID: ${id}`);
   }
 
   // Queries
@@ -69,6 +71,7 @@ export class DatabaseStorage implements IStorage {
     const id = randomUUID();
     const queryWithId = { ...insertQuery, id };
     await db.insert(queries).values(queryWithId);
+    console.log(`[DB] ✅ Query saved to database - ID: ${id}`);
     const [query] = await db.select().from(queries).where(eq(queries.id, id));
     return query;
   }
@@ -87,6 +90,7 @@ export class DatabaseStorage implements IStorage {
     const id = randomUUID();
     const faqWithId = { ...insertFaq, id };
     await db.insert(faqs).values(faqWithId);
+    console.log(`[DB] ✅ FAQ saved to database - ID: ${id}`);
     const [faq] = await db.select().from(faqs).where(eq(faqs.id, id));
     return faq;
   }
@@ -109,12 +113,14 @@ export class DatabaseStorage implements IStorage {
       .update(faqs)
       .set({ ...data, updatedAt: new Date() })
       .where(eq(faqs.id, id));
+    console.log(`[DB] ✅ FAQ updated in database - ID: ${id}`);
     const [faq] = await db.select().from(faqs).where(eq(faqs.id, id));
     return faq || undefined;
   }
 
   async deleteFaq(id: string): Promise<void> {
     await db.delete(faqs).where(eq(faqs.id, id));
+    console.log(`[DB] ✅ FAQ deleted from database - ID: ${id}`);
   }
 }
 

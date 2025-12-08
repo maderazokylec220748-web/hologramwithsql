@@ -31,7 +31,16 @@ export function AnalyticsDashboard() {
       if (dateRange.from) params.append('startDate', dateRange.from.toISOString());
       if (dateRange.to) params.append('endDate', dateRange.to.toISOString());
       
-      const response = await fetch(`/api/admin/analytics?${params}`);
+      // Force cache busting for desktop app
+      params.append('_t', Date.now().toString());
+      
+      const response = await fetch(`/api/admin/analytics?${params}`, {
+        cache: 'no-store',
+        headers: {
+          'Cache-Control': 'no-cache',
+          'Pragma': 'no-cache'
+        }
+      });
       if (response.ok) {
         const data = await response.json();
         setStats(data);
@@ -45,6 +54,13 @@ export function AnalyticsDashboard() {
 
   useEffect(() => {
     fetchAnalytics();
+    
+    // Auto-refresh every 30 seconds to keep desktop app in sync
+    const interval = setInterval(() => {
+      fetchAnalytics();
+    }, 30000);
+    
+    return () => clearInterval(interval);
   }, [dateRange]);
 
   if (loading) {

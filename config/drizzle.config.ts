@@ -5,8 +5,8 @@ if (!process.env.DATABASE_URL) {
 }
 
 export default defineConfig({
-  out: "../migrations",
-  schema: "../shared/schema.ts",
+  out: "./migrations",
+  schema: "./shared/schema.ts",
   dialect: "mysql",
   dbCredentials: {
     url: process.env.DATABASE_URL,

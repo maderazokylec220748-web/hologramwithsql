@@ -75,36 +75,28 @@ export function ChatInterface({
               <div className="flex flex-col gap-2">
                 <div
                   className={cn(
-                    "max-w-[90%] sm:max-w-[80%] rounded-2xl px-3 sm:px-4 py-2 sm:py-3",
+                    "rounded-2xl px-3 sm:px-4 py-2 sm:py-3",
                     message.isUser
-                      ? "bg-[hsl(0,75%,25%)] text-[hsl(45,30%,98%)]"
-                      : "border-2 border-[hsl(48,100%,50%)] bg-transparent backdrop-blur-sm text-[hsl(45,30%,98%)]"
+                      ? "bg-[hsl(0,75%,25%)] text-[hsl(45,30%,98%)] max-w-[80%] sm:max-w-[70%]"
+                      : "border-2 border-[hsl(48,100%,50%)] bg-transparent backdrop-blur-sm text-[hsl(45,30%,98%)] max-w-[90%] sm:max-w-[80%]"
                   )}
                 >
-                  <motion.div 
+                  <motion.p 
                     key={message.id}
-                    className="text-sm sm:text-lg font-medium leading-loose tracking-wide whitespace-pre-wrap break-words"
+                    className="text-sm sm:text-lg font-medium leading-relaxed tracking-wide whitespace-pre-wrap"
                     initial={{ opacity: 0 }}
                     animate={{ opacity: 1 }}
                     transition={{ duration: 0.5 }}
                   >
-                    {!message.isUser ? (
-                      <TypewriterText 
-                        text={message.text} 
-                        shouldStop={!isTyping && !isSpeaking}
-                        onComplete={() => setCompletedTyping(prev => new Set(prev).add(message.id))}
-                      />
-                    ) : (
-                      message.text
-                    )}
-                  </motion.div>
+                    {message.text}
+                  </motion.p>
                   <p className="text-xs opacity-60 mt-1">
                     {message.timestamp.toLocaleTimeString()}
                   </p>
                 </div>
                 
-                {/* Feedback buttons for AI messages - only show after typing completes */}
-                {!message.isUser && !ratedMessages.has(message.id) && completedTyping.has(message.id) && (
+                {/* Feedback buttons for AI messages - only show when not typing or speaking */}
+                {!message.isUser && !ratedMessages.has(message.id) && !isTyping && !isSpeaking && (
                   <motion.div 
                     initial={{ opacity: 0, y: -10 }}
                     animate={{ opacity: 1, y: 0 }}
@@ -147,7 +139,7 @@ export function ChatInterface({
                     animate={{ opacity: 1 }}
                     className="flex gap-2 ml-2 items-center text-xs text-[hsl(48,100%,50%)] opacity-70"
                   >
-                    ✓ Thank you for your feedback!
+                    <span>Thanks for your feedback!</span>
                   </motion.div>
                 )}
               </div>

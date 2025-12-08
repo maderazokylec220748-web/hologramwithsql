@@ -6,16 +6,44 @@ const http = require('http');
 const root = path.resolve(__dirname, '..');
 let serverProc = null;
 let clientProc = null;
+let mainWindow = null;
+
+// Single instance lock - prevent multiple instances
+const gotTheLock = app.requestSingleInstanceLock();
+
+if (!gotTheLock) {
+  // Another instance is already running, quit this one
+  app.quit();
+} else {
+  // This is the first instance
+  app.on('second-instance', (event, commandLine, workingDirectory) => {
+    // Someone tried to run a second instance, focus our window instead
+    if (mainWindow) {
+      if (mainWindow.isMinimized()) mainWindow.restore();
+      mainWindow.focus();
+    }
+  });
+}
 
 function startServer() {
   console.log('Starting server (npx tsx watch server/index.ts)');
-  serverProc = spawn('npx', ['tsx', 'watch', 'server/index.ts'], { cwd: root, shell: true, stdio: 'inherit' });
+  serverProc = spawn('npx', ['tsx', 'watch', 'server/index.ts'], { 
+    cwd: root, 
+    shell: true, 
+    stdio: 'ignore',
+    windowsHide: true
+  });
   serverProc.on('exit', (code) => { console.log('Server process exited with code', code); });
 }
 
 function startClient() {
   console.log('Starting client (npm run dev in client/)');
-  clientProc = spawn('npm', ['run', 'dev'], { cwd: path.join(root, 'client'), shell: true, stdio: 'inherit' });
+  clientProc = spawn('npm', ['run', 'dev'], { 
+    cwd: path.join(root, 'client'), 
+    shell: true, 
+    stdio: 'ignore',
+    windowsHide: true
+  });
   clientProc.on('exit', (code) => { console.log('Client process exited with code', code); });
 }
 
@@ -56,30 +84,104 @@ function waitForUrl(url, timeout = 120000) {
 let hologramWindow = null;
 
 function createWindow() {
+  // If window already exists, just focus it
+  if (mainWindow) {
+    mainWindow.focus();
+    return;
+  }
+
   const iconPath = path.join(__dirname, '..', 'build', 'icon.ico');
   console.log('Loading icon from:', iconPath);
   console.log('Icon exists:', require('fs').existsSync(iconPath));
   
-  const win = new BrowserWindow({
+  mainWindow = new BrowserWindow({
     width: 1200,
     height: 800,
     fullscreen: true,
     icon: iconPath,
+    backgroundColor: '#0f172a',
+    show: false,
     webPreferences: {
       nodeIntegration: false,
       contextIsolation: true,
-      cache: false, // Disable cache in development
+      cache: false,
+      partition: 'persist:nocache', // Use a separate session that we can clear
     },
   });
-  win.removeMenu();
+  mainWindow.removeMenu();
   
-  // Clear cache before loading
-  win.webContents.session.clearCache();
+  // Completely disable all caching in Electron
+  const session = mainWindow.webContents.session;
   
-  win.loadURL('http://localhost:5173');
+  // Clear all existing cache immediately
+  session.clearCache().then(() => {
+    console.log('Electron cache cleared');
+  });
+  
+  // Disable cache for API requests only (don't interfere with WebSocket)
+  session.webRequest.onBeforeSendHeaders((details, callback) => {
+    // Don't modify WebSocket upgrade requests
+    if (details.resourceType !== 'webSocket') {
+      details.requestHeaders['Cache-Control'] = 'no-cache, no-store, must-revalidate';
+      details.requestHeaders['Pragma'] = 'no-cache';
+      details.requestHeaders['Expires'] = '0';
+    }
+    callback({ requestHeaders: details.requestHeaders });
+  });
+  
+  // Override response headers to prevent caching (but not for WebSocket)
+  session.webRequest.onHeadersReceived((details, callback) => {
+    // Don't modify WebSocket responses
+    if (details.resourceType !== 'webSocket') {
+      callback({
+        responseHeaders: {
+          ...details.responseHeaders,
+          'Cache-Control': ['no-cache, no-store, must-revalidate'],
+          'Pragma': ['no-cache'],
+          'Expires': ['0']
+        }
+      });
+    } else {
+      callback({ responseHeaders: details.responseHeaders });
+    }
+  });
+  
+  // Wait for both servers to be ready
+  console.log('Waiting for servers to start...');
+  
+  Promise.all([
+    waitForUrl('http://localhost:5001', 120000),
+    waitForUrl('http://localhost:3000', 120000)
+  ])
+    .then(() => {
+      console.log('Both servers are ready, loading main app');
+      mainWindow.loadURL('http://localhost:3000');
+      mainWindow.show();
+    })
+    .catch((err) => {
+      console.error('Failed to start servers:', err);
+      mainWindow.loadURL('data:text/html;charset=utf-8,' + encodeURIComponent(`
+        <html>
+          <body style="background:#1e293b;color:white;font-family:sans-serif;display:flex;align-items:center;justify-content:center;height:100vh;margin:0;">
+            <div style="text-align:center;">
+              <h1>⚠️ Failed to Start</h1>
+              <p>Could not connect to the servers.</p>
+              <p style="font-size:14px;opacity:0.7;">Make sure ports 3000 and 5001 are free.</p>
+              <p style="font-size:14px;opacity:0.7;">Close this window and try again.</p>
+            </div>
+          </body>
+        </html>
+      `));
+      mainWindow.show();
+    });
+  
+  // Clear mainWindow reference when closed
+  mainWindow.on('closed', () => {
+    mainWindow = null;
+  });
   
   // Handle window.open() for /hologram route
-  win.webContents.setWindowOpenHandler(({ url }) => {
+  mainWindow.webContents.setWindowOpenHandler(({ url }) => {
     console.log('Window open request for:', url);
     
     if (url.includes('/hologram')) {
@@ -159,43 +261,64 @@ app.on('ready', async () => {
     return;
   }
 
-  // Development mode: start server and client if not already running and open dev URL
-  // Start server if not already running
-  const serverUp = await isUrlUp('http://localhost:3000/');
-  if (!serverUp) {
-    startServer();
-  } else {
-    console.log('Server already running on http://localhost:3000 — skipping start');
-  }
-
-  // Start client only if Vite isn't already serving on 5173
-  const clientUp = await isUrlUp('http://localhost:5173/');
-  if (!clientUp) {
-    startClient();
-  } else {
-    console.log('Client already running on http://localhost:5173 — skipping start');
-  }
-
-  try {
-    await waitForUrl('http://localhost:5173/');
-    console.log('Client is up — opening desktop window');
+  // Development mode: Check if servers are already running
+  const serverUp = await isUrlUp('http://localhost:5001/');
+  const clientUp = await isUrlUp('http://localhost:3000/');
+  
+  if (serverUp && clientUp) {
+    console.log('Server already running on http://localhost:5001');
+    console.log('Client already running on http://localhost:3000');
+    console.log('Opening desktop window immediately');
     createWindow();
-  } catch (err) {
-    console.error('Error waiting for client to start:', err);
-    createWindow();
+  } else {
+    console.log('⚠️  Dev servers not running!');
+    console.log('Please start the dev servers first:');
+    console.log('  1. Open terminal in project folder');
+    console.log('  2. Run: node scripts/dev.cjs');
+    console.log('  3. Wait for servers to start');
+    console.log('  4. Then launch this app');
+    
+    // Try to open window anyway (will show error if servers aren't ready)
+    setTimeout(() => {
+      createWindow();
+    }, 2000);
   }
 });
 
 app.on('window-all-closed', () => {
-  if (process.platform !== 'darwin') app.quit();
+  // Kill all Node.js processes when app closes
+  cleanup();
+  if (process.platform !== 'darwin') {
+    app.quit();
+  }
 });
 
 function cleanup() {
+  console.log('Cleaning up processes...');
+  
+  // Kill spawned processes
   if (serverProc) {
-    try { serverProc.kill(); } catch (_) {}
+    try { 
+      serverProc.kill(); 
+      console.log('Server process killed');
+    } catch (_) {}
   }
   if (clientProc) {
-    try { clientProc.kill(); } catch (_) {}
+    try { 
+      clientProc.kill(); 
+      console.log('Client process killed');
+    } catch (_) {}
+  }
+  
+  // Kill all Node.js processes on Windows (force cleanup)
+  if (process.platform === 'win32') {
+    try {
+      const { execSync } = require('child_process');
+      execSync('taskkill /F /IM node.exe /T', { stdio: 'ignore' });
+      console.log('All Node.js processes terminated');
+    } catch (error) {
+      // Ignore errors if no processes to kill
+    }
   }
 }
 

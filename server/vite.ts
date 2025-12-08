@@ -31,11 +31,20 @@ export async function setupVite(app: Express, server: Server) {
     configFile: false,
     customLogger: {
       ...viteLogger,
+      warn: (msg, options) => {
+        // Suppress React optimization warnings - they're harmless in SSR mode
+        if (msg.includes('optimizeDeps.include') || msg.includes('Failed to resolve dependency')) {
+          return;
+        }
+        viteLogger.warn(msg, options);
+      },
       error: (msg, options) => {
         viteLogger.error(msg, options);
         process.exit(1);
       },
     },
+    // Override any optimizeDeps from viteConfig - server doesn't need to optimize React
+    optimizeDeps: undefined,
     server: serverOptions,
     appType: "custom",
   });

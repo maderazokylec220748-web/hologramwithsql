@@ -44,25 +44,27 @@ class Analytics {
   // Get analytics statistics
   async getStats(startDate?: Date, endDate?: Date): Promise<AnalyticsStats> {
     try {
-      // Total queries
-      const totalQueriesResult = await db.execute(sql`
+      // Total queries - db.execute returns [rows, fields], we need rows[0]
+      const [totalQueriesRows] = await db.execute(sql`
         SELECT COUNT(*) as count FROM queries
         WHERE ${startDate ? sql`created_at >= ${startDate}` : sql`1=1`}
         AND ${endDate ? sql`created_at <= ${endDate}` : sql`1=1`}
       `);
-      const totalQueries = (totalQueriesResult[0] as any)?.count || 0;
+      const count = (totalQueriesRows[0] as any)?.count;
+      const totalQueries = typeof count === 'bigint' ? Number(count) : (count || 0);
 
       // Average response time
-      const avgResponseResult = await db.execute(sql`
+      const [avgResponseRows] = await db.execute(sql`
         SELECT AVG(response_time) as avg_time FROM queries
         WHERE response_time IS NOT NULL
         AND ${startDate ? sql`created_at >= ${startDate}` : sql`1=1`}
         AND ${endDate ? sql`created_at <= ${endDate}` : sql`1=1`}
       `);
-      const avgResponseTime = (avgResponseResult[0] as any)?.avg_time || 0;
+      const avgTime = (avgResponseRows[0] as any)?.avg_time;
+      const avgResponseTime = typeof avgTime === 'bigint' ? Number(avgTime) : (avgTime || 0);
 
       // Popular questions
-      const popularQuestionsResult = await db.execute(sql`
+      const [popularQuestionsRows] = await db.execute(sql`
         SELECT question, COUNT(*) as count
         FROM queries
         WHERE ${startDate ? sql`created_at >= ${startDate}` : sql`1=1`}
@@ -71,13 +73,13 @@ class Analytics {
         ORDER BY count DESC
         LIMIT 10
       `);
-      const popularQuestions = (popularQuestionsResult as any[]).map((row: any) => ({
+      const popularQuestions = (popularQuestionsRows as any[]).map((row: any) => ({
         question: row.question,
-        count: row.count,
+        count: typeof row.count === 'bigint' ? Number(row.count) : row.count,
       }));
 
       // Category breakdown
-      const categoryResult = await db.execute(sql`
+      const [categoryRows] = await db.execute(sql`
         SELECT category, COUNT(*) as count
         FROM queries
         WHERE category IS NOT NULL
@@ -86,25 +88,25 @@ class Analytics {
         GROUP BY category
       `);
       const categoryBreakdown: Record<string, number> = {};
-      (categoryResult as any[]).forEach((row: any) => {
-        categoryBreakdown[row.category] = row.count;
+      (categoryRows as any[]).forEach((row: any) => {
+        categoryBreakdown[row.category] = typeof row.count === 'bigint' ? Number(row.count) : row.count;
       });
 
-      // Peak hours (0-23)
-      const peakHoursResult = await db.execute(sql`
-        SELECT HOUR(created_at) as hour, COUNT(*) as count
+      // Peak hours (0-23) - using local timezone
+      const [peakHoursRows] = await db.execute(sql`
+        SELECT HOUR(CONVERT_TZ(created_at, '+00:00', @@session.time_zone)) as hour, COUNT(*) as count
         FROM queries
         WHERE ${startDate ? sql`created_at >= ${startDate}` : sql`1=1`}
         AND ${endDate ? sql`created_at <= ${endDate}` : sql`1=1`}
-        GROUP BY HOUR(created_at)
+        GROUP BY HOUR(CONVERT_TZ(created_at, '+00:00', @@session.time_zone))
       `);
       const peakHours: Record<number, number> = {};
-      (peakHoursResult as any[]).forEach((row: any) => {
-        peakHours[row.hour] = row.count;
+      (peakHoursRows as any[]).forEach((row: any) => {
+        peakHours[row.hour] = typeof row.count === 'bigint' ? Number(row.count) : row.count;
       });
 
       // User type distribution
-      const userTypeResult = await db.execute(sql`
+      const [userTypeRows] = await db.execute(sql`
         SELECT user_type, COUNT(*) as count
         FROM queries
         WHERE ${startDate ? sql`created_at >= ${startDate}` : sql`1=1`}
@@ -112,23 +114,25 @@ class Analytics {
         GROUP BY user_type
       `);
       const userTypeDistribution: Record<string, number> = {};
-      (userTypeResult as any[]).forEach((row: any) => {
-        userTypeDistribution[row.user_type] = row.count;
+      (userTypeRows as any[]).forEach((row: any) => {
+        userTypeDistribution[row.user_type] = typeof row.count === 'bigint' ? Number(row.count) : row.count;
       });
 
       // Feedback statistics (with error handling for new table)
       let totalFeedback = { positive: 0, negative: 0 };
       try {
-        const feedbackResult = await db.execute(sql`
+        const [feedbackRows] = await db.execute(sql`
           SELECT rating, COUNT(*) as count
           FROM feedback
           WHERE ${startDate ? sql`created_at >= ${startDate}` : sql`1=1`}
           AND ${endDate ? sql`created_at <= ${endDate}` : sql`1=1`}
           GROUP BY rating
         `);
-        (feedbackResult as any[]).forEach((row: any) => {
-          if (row.rating === 'positive') totalFeedback.positive = row.count;
-          if (row.rating === 'negative') totalFeedback.negative = row.count;
+        (feedbackRows as any[]).forEach((row: any) => {
+          // Convert BigInt to number
+          const count = typeof row.count === 'bigint' ? Number(row.count) : row.count;
+          if (row.rating === 'positive') totalFeedback.positive = count;
+          if (row.rating === 'negative') totalFeedback.negative = count;
         });
       } catch (error) {
         console.log('Feedback table not available yet:', error);
@@ -203,6 +207,7 @@ class Analytics {
         comment: comment || null,
         createdAt: new Date(),
       });
+      console.log(`[Analytics] Feedback saved: ${rating} for query ${queryId}`);
 
       // Also track as event
       await this.trackEvent({
@@ -214,7 +219,8 @@ class Analytics {
         },
       });
     } catch (error) {
-      console.error('[Analytics] Failed to save feedback:', error);
+      console.error('[Analytics] ❌ Failed to save feedback:', error);
+      throw error; // Re-throw to notify caller
     }
   }
 

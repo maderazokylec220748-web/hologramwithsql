@@ -15,49 +15,97 @@ export function QueryDashboard() {
   
   const { data: queries, isLoading } = useQuery<Query[]>({
     queryKey: ["/api/admin/queries"],
+    queryFn: async () => {
+      // Force cache bust with timestamp
+      const response = await fetch(`/api/admin/queries?_=${Date.now()}`, {
+        credentials: 'include',
+        cache: 'no-store',
+        headers: {
+          'Cache-Control': 'no-cache, no-store, must-revalidate',
+          'Pragma': 'no-cache',
+          'Expires': '0'
+        }
+      });
+      if (!response.ok) throw new Error('Failed to fetch queries');
+      return response.json();
+    },
     staleTime: 0, // Always consider data stale
+    gcTime: 0, // Don't keep data in cache
     refetchInterval: 5000, // Refetch every 5 seconds as backup
     refetchOnWindowFocus: true, // Refetch when window gains focus
+    refetchOnMount: 'always', // Always refetch when component mounts
   });
 
-  // WebSocket connection for real-time updates
+  // WebSocket connection for real-time updates with auto-reconnect
   useEffect(() => {
-    const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
-    const wsUrl = `${protocol}//${window.location.host}/ws`;
-    const ws = new WebSocket(wsUrl);
+    let ws: WebSocket | null = null;
+    let reconnectTimeout: NodeJS.Timeout;
+    let isUnmounted = false;
 
-    ws.onopen = () => {
-      console.log('WebSocket connected for admin dashboard');
-      setIsConnected(true);
-      // Subscribe to admin updates
-      ws.send(JSON.stringify({ type: 'admin_subscribe' }));
-    };
+    const connect = () => {
+      if (isUnmounted) return;
 
-    ws.onmessage = (event) => {
+      const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+      const wsUrl = `${protocol}//${window.location.hostname}:${window.location.port || (window.location.protocol === 'https:' ? '443' : '80')}/ws`;
+      
       try {
-        const data = JSON.parse(event.data);
-        if (data.type === 'new_query') {
-          console.log('New query received:', data.query);
-          // Invalidate queries to refetch the latest data
-          queryClient.invalidateQueries({ queryKey: ["/api/admin/queries"] });
-        }
+        ws = new WebSocket(wsUrl);
+
+        ws.onopen = () => {
+          console.log('WebSocket connected for admin dashboard');
+          // Subscribe to admin updates
+          if (ws?.readyState === WebSocket.OPEN) {
+            ws.send(JSON.stringify({ type: 'admin_subscribe' }));
+          }
+        };
+
+        ws.onmessage = (event) => {
+          try {
+            const data = JSON.parse(event.data);
+            if (data.type === 'subscribed') {
+              console.log('Subscribed to admin updates');
+              setIsConnected(true);
+            } else if (data.type === 'new_query') {
+              console.log('New query received:', data.query);
+              // Invalidate queries to refetch the latest data
+              queryClient.invalidateQueries({ queryKey: ["/api/admin/queries"] });
+            }
+          } catch (error) {
+            console.error('Error parsing WebSocket message:', error);
+          }
+        };
+
+        ws.onclose = () => {
+          console.log('WebSocket disconnected, will reconnect...');
+          setIsConnected(false);
+          // Reconnect after 3 seconds
+          if (!isUnmounted) {
+            reconnectTimeout = setTimeout(connect, 3000);
+          }
+        };
+
+        ws.onerror = (error) => {
+          console.error('WebSocket error:', error);
+          setIsConnected(false);
+          ws?.close();
+        };
       } catch (error) {
-        console.error('Error parsing WebSocket message:', error);
+        console.error('Failed to create WebSocket:', error);
+        setIsConnected(false);
+        if (!isUnmounted) {
+          reconnectTimeout = setTimeout(connect, 3000);
+        }
       }
     };
 
-    ws.onclose = () => {
-      console.log('WebSocket disconnected');
-      setIsConnected(false);
-    };
-
-    ws.onerror = (error) => {
-      console.error('WebSocket error:', error);
-      setIsConnected(false);
-    };
+    connect();
 
     return () => {
-      ws.close();
+      isUnmounted = true;
+      clearTimeout(reconnectTimeout);
+      if (ws) {
+        ws.close();
+      }
     };
   }, [queryClient]);
 

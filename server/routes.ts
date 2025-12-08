@@ -38,7 +38,80 @@ const generalApiLimiter = rateLimit({
 });
 
 export async function registerRoutes(app: Express): Promise<Server> {
-  const server = createServer(app);
+  const httpServer = createServer(app);
+  
+  // WebSocket server for real-time hologram sync and admin updates
+  const wss = new WebSocketServer({ server: httpServer, path: '/ws' });
+  
+  // Track admin clients for real-time updates
+  const adminClients = new Set<WebSocket>();
+
+  // Function to broadcast to admin clients
+  function broadcastToAdmins(data: any) {
+    adminClients.forEach((client) => {
+      if (client.readyState === WebSocket.OPEN) {
+        try {
+          client.send(JSON.stringify(data));
+        } catch (error) {
+          console.error('Error broadcasting to admin:', error);
+          adminClients.delete(client);
+        }
+      } else {
+        adminClients.delete(client);
+      }
+    });
+  }
+
+  // WebSocket connection handling
+  wss.on('connection', (ws, req) => {
+    console.log('WebSocket client connected');
+    
+    let isAuthenticated = false;
+    let isAdmin = false;
+
+    ws.on('message', (message) => {
+      try {
+        const data = JSON.parse(message.toString());
+        
+        // Handle admin subscription for real-time updates
+        if (data.type === 'admin_subscribe') {
+          isAuthenticated = true;
+          isAdmin = true;
+          adminClients.add(ws);
+          console.log('Admin client subscribed for real-time updates');
+          ws.send(JSON.stringify({ type: 'subscribed', message: 'Connected to admin updates' }));
+          return;
+        }
+        
+        // Validate message size to prevent abuse
+        const messageStr = JSON.stringify(data);
+        if (messageStr.length > 50000) {
+          ws.send(JSON.stringify({ type: 'error', message: 'Message too large' }));
+          return;
+        }
+        
+        // Broadcast to all connected clients (for hologram sync)
+        wss.clients.forEach((client) => {
+          if (client !== ws && client.readyState === WebSocket.OPEN) {
+            client.send(JSON.stringify(data));
+          }
+        });
+      } catch (error) {
+        console.error('WebSocket message error:', error);
+        ws.send(JSON.stringify({ type: 'error', message: 'Invalid message format' }));
+      }
+    });
+
+    ws.on('close', () => {
+      console.log('WebSocket client disconnected');
+      adminClients.delete(ws);
+    });
+    
+    ws.on('error', (error) => {
+      console.error('WebSocket error:', error);
+      adminClients.delete(ws);
+    });
+  });
   
   // Add session middleware
   app.use(sessionMiddleware);
@@ -210,6 +283,11 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // Admin - Get analytics stats
   app.get("/api/admin/analytics", requireAuth, generalApiLimiter, async (req, res) => {
     try {
+      // Prevent caching of analytics data
+      res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate, private');
+      res.setHeader('Pragma', 'no-cache');
+      res.setHeader('Expires', '0');
+      
       const { startDate, endDate } = req.query;
       const start = startDate ? new Date(startDate as string) : undefined;
       const end = endDate ? new Date(endDate as string) : undefined;
@@ -225,6 +303,11 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // Admin - Get all queries (requires authentication)
   app.get("/api/admin/queries", requireAuth, async (req, res) => {
     try {
+      // Prevent caching of query data
+      res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate, private');
+      res.setHeader('Pragma', 'no-cache');
+      res.setHeader('Expires', '0');
+      
       const allQueries = await storage.getAllQueries();
       res.json(allQueries);
     } catch (error) {
@@ -338,90 +421,6 @@ export async function registerRoutes(app: Express): Promise<Server> {
       console.error("Get active FAQs error:", error);
       res.status(500).json({ error: "Failed to fetch active FAQs" });
     }
-  });
-
-  const httpServer = createServer(app);
-
-  // WebSocket server for real-time hologram sync and admin updates
-  const wss = new WebSocketServer({ server: httpServer, path: '/ws' });
-  
-  // Track admin clients for real-time updates
-  const adminClients = new Set<WebSocket>();
-
-  // Function to broadcast to admin clients
-  function broadcastToAdmins(data: any) {
-    adminClients.forEach((client) => {
-      if (client.readyState === WebSocket.OPEN) {
-        try {
-          client.send(JSON.stringify(data));
-        } catch (error) {
-          console.error('Error broadcasting to admin:', error);
-          adminClients.delete(client);
-        }
-      } else {
-        adminClients.delete(client);
-      }
-    });
-  }
-
-  wss.on('connection', (ws, req) => {
-    console.log('WebSocket client connected');
-    
-    // Mark if this connection is authenticated as admin
-    let isAuthenticated = false;
-    let isAdmin = false;
-
-    ws.on('message', (message) => {
-      try {
-        const data = JSON.parse(message.toString());
-        
-        // Handle admin subscription for real-time updates (requires authentication)
-        if (data.type === 'admin_subscribe') {
-          // In a production system, verify session cookie here
-          // For now, we'll add a simple authentication token check
-          if (data.authToken) {
-            // TODO: Verify this token against session store
-            // For now, accept with warning
-            console.warn('WebSocket admin subscription - implement proper authentication');
-            isAuthenticated = true;
-            isAdmin = true;
-            adminClients.add(ws);
-            console.log('Admin client subscribed for real-time updates');
-            ws.send(JSON.stringify({ type: 'auth_success', message: 'Authenticated as admin' }));
-          } else {
-            ws.send(JSON.stringify({ type: 'auth_error', message: 'Authentication required' }));
-          }
-          return;
-        }
-        
-        // Validate message size to prevent abuse
-        const messageStr = JSON.stringify(data);
-        if (messageStr.length > 50000) { // 50KB limit
-          ws.send(JSON.stringify({ type: 'error', message: 'Message too large' }));
-          return;
-        }
-        
-        // Broadcast to all connected clients (for hologram sync)
-        wss.clients.forEach((client) => {
-          if (client !== ws && client.readyState === WebSocket.OPEN) {
-            client.send(JSON.stringify(data));
-          }
-        });
-      } catch (error) {
-        console.error('WebSocket message error:', error);
-        ws.send(JSON.stringify({ type: 'error', message: 'Invalid message format' }));
-      }
-    });
-
-    ws.on('close', () => {
-      console.log('WebSocket client disconnected');
-      adminClients.delete(ws);
-    });
-    
-    ws.on('error', (error) => {
-      console.error('WebSocket error:', error);
-      adminClients.delete(ws);
-    });
   });
 
   return httpServer;

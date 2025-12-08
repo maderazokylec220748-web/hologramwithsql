@@ -15,9 +15,11 @@ export function TypewriterText({ text, speed = 30, onComplete, shouldStop = fals
 
   // Reset when text changes
   useEffect(() => {
-    textRef.current = text;
-    setDisplayedText('');
-    setCurrentIndex(0);
+    if (textRef.current !== text) {
+      textRef.current = text;
+      setDisplayedText('');
+      setCurrentIndex(0);
+    }
     
     return () => {
       if (timeoutRef.current) {
@@ -29,16 +31,14 @@ export function TypewriterText({ text, speed = 30, onComplete, shouldStop = fals
   // Handle typing animation
   useEffect(() => {
     // If shouldStop is true, immediately show all text
-    if (shouldStop) {
-      if (displayedText !== text) {
-        setDisplayedText(text);
-        setCurrentIndex(text.length);
-      }
+    if (shouldStop && displayedText !== text) {
+      setDisplayedText(text);
+      setCurrentIndex(text.length);
       if (timeoutRef.current) {
         clearTimeout(timeoutRef.current);
         timeoutRef.current = null;
       }
-      if (onComplete && currentIndex === text.length) {
+      if (onComplete) {
         onComplete();
       }
       return;
@@ -50,7 +50,7 @@ export function TypewriterText({ text, speed = 30, onComplete, shouldStop = fals
         setDisplayedText((prev) => prev + text[currentIndex]);
         setCurrentIndex((prev) => prev + 1);
       }, speed);
-    } else if (currentIndex === text.length && onComplete) {
+    } else if (currentIndex === text.length && currentIndex > 0 && onComplete) {
       onComplete();
     }
 
@@ -59,7 +59,7 @@ export function TypewriterText({ text, speed = 30, onComplete, shouldStop = fals
         clearTimeout(timeoutRef.current);
       }
     };
-  }, [currentIndex, text, speed, onComplete, shouldStop, displayedText]);
+  }, [currentIndex, text, speed, onComplete, shouldStop]);
 
   // Split by newlines and render with proper line breaks
   const lines = displayedText.split('\n');

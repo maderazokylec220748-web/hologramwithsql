@@ -153,4 +153,59 @@ export type AnalyticsEvent = typeof analyticsEvents.$inferSelect;
 
 export type Feedback = typeof feedback.$inferSelect;
 
-export type ChatHistory = typeof chatHistory.$inferSelect;
+// API Response Validation Schemas
+export const apiChatResponseSchema = z.object({
+  answer: z.string(),
+  audioUrl: z.string().optional(),
+  category: z.string().optional(),
+});
+
+export const apiLoginResponseSchema = z.object({
+  user: z.object({
+    id: z.string(),
+    username: z.string(),
+    role: z.string(),
+    fullName: z.string(),
+    email: z.string().email(),
+    createdAt: z.date(),
+  }),
+});
+
+export const apiQueryResponseSchema = z.object({
+  id: z.string(),
+  question: z.string(),
+  answer: z.string(),
+  userType: z.enum(['visitor', 'student', 'parent']),
+  category: z.string().nullable(),
+  createdAt: z.date(),
+  responseTime: z.number().nullable(),
+});
+
+export const apiAnalyticsResponseSchema = z.object({
+  totalQueries: z.number(),
+  avgResponseTime: z.number(),
+  popularQuestions: z.array(z.object({
+    question: z.string(),
+    count: z.number(),
+  })),
+  categoryBreakdown: z.array(z.object({
+    category: z.string(),
+    count: z.number(),
+  })),
+  peakHours: z.array(z.object({
+    hour: z.number(),
+    count: z.number(),
+  })),
+  userTypeDistribution: z.array(z.object({
+    userType: z.string(),
+    count: z.number(),
+  })),
+  feedbackPositive: z.number(),
+  feedbackNegative: z.number(),
+});
+
+// Type exports for API responses
+export type ApiChatResponse = z.infer<typeof apiChatResponseSchema>;
+export type ApiLoginResponse = z.infer<typeof apiLoginResponseSchema>;
+export type ApiQueryResponse = z.infer<typeof apiQueryResponseSchema>;
+export type ApiAnalyticsResponse = z.infer<typeof apiAnalyticsResponseSchema>;

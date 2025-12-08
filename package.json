@@ -1,22 +1,21 @@
 {
-  "name": "rest-express",
+  "name": "wis-ai-hologram-assistant",
   "version": "1.0.0",
+  "description": "AI-powered holographic assistant for Westmead International School",
   "type": "module",
   "license": "MIT",
-  "main": "electron/main.cjs",
   "scripts": {
     "dev:server": "tsx watch server/index.ts",
     "dev:client": "cd client && npm run dev",
     "dev": "node scripts/dev.cjs",
-    "dev:desktop": "electron .",
     "build": "npm run build:client && npm run build:server",
     "build:client": "cd client && npm run build",
     "build:server": "esbuild server/index.ts --platform=node --packages=external --bundle --format=esm --outdir=dist",
-    "dist": "npm run build:client && npm run build:server && electron-builder",
     "start": "cross-env NODE_ENV=production node dist/index.js",
     "check": "tsc",
     "db:push": "drizzle-kit push",
-    "db:setup": "node scripts/run-migration.js"
+    "db:setup": "node scripts/run-migration.js",
+    "db:migrate": "node scripts/run-migration.js"
   },
   "dependencies": {
     "@hookform/resolvers": "^3.10.0",
@@ -96,8 +95,9 @@
   "devDependencies": {
     "@tailwindcss/typography": "^0.5.15",
     "@tailwindcss/vite": "^4.1.3",
-    "@types/connect-pg-simple": "^7.0.3",
+    "@types/cookie-parser": "^1.4.10",
     "@types/cors": "^2.8.19",
+    "@types/csurf": "^1.11.5",
     "@types/express": "4.17.21",
     "@types/express-mysql-session": "^3.0.7",
     "@types/express-session": "^1.18.2",
@@ -114,8 +114,6 @@
     "cross-env": "^10.1.0",
     "dotenv": "^17.2.3",
     "drizzle-kit": "^0.31.4",
-    "electron": "^26.6.10",
-    "electron-builder": "^24.13.3",
     "esbuild": "^0.25.0",
     "postcss": "^8.4.47",
     "tailwindcss": "^3.4.17",
@@ -123,28 +121,7 @@
     "typescript": "5.6.3",
     "vite": "^5.4.21"
   },
-  "build": {
-    "appId": "com.hologram.hologramwithsql",
-    "productName": "W.I.S. AI - Where Intelligence Starts",
-    "files": [
-      "dist/**/*",
-      "client/dist/**/*",
-      "electron/**/*",
-      "package.json",
-      "node_modules/**/*"
-    ],
-    "directories": {
-      "buildResources": "build"
-    },
-    "win": {
-      "icon": "build/icon.ico",
-      "target": [
-        "portable"
-      ]
-    }
-  },
   "optionalDependencies": {
-    "bufferutil": "^4.0.8",
-    "electron": "^26.0.0"
+    "bufferutil": "^4.0.8"
   }
 }

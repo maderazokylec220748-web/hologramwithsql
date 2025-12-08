@@ -1,13 +1,37 @@
 import express, { type Request, Response, NextFunction } from "express";
 import { registerRoutes } from "./routes";
-import { setupVite, serveStatic, log } from "./vite";
+import { setupVite, serveStatic, log as viteLog } from "./vite";
 import { WebSocketServer } from 'ws';
 import { createServer } from 'http';
 import cors from 'cors';
 import helmet from 'helmet';
 import { scheduleCleanup } from './cleanup';
+import cookieParser from 'cookie-parser';
+import csrf from 'csurf';
 
 const app = express();
+
+// HTTPS enforcement for production
+if (process.env.NODE_ENV === 'production') {
+  app.use((req, res, next) => {
+    // Check if request is coming through a proxy (like nginx, cloudflare)
+    const forwardedProto = req.header('x-forwarded-proto');
+    
+    if (forwardedProto && forwardedProto !== 'https') {
+      return res.redirect(301, `https://${req.header('host')}${req.url}`);
+    }
+    
+    // Force HTTPS
+    if (!req.secure && !req.header('x-forwarded-proto')) {
+      return res.redirect(301, `https://${req.header('host')}${req.url}`);
+    }
+    
+    // Add HSTS header (HTTP Strict Transport Security)
+    res.setHeader('Strict-Transport-Security', 'max-age=31536000; includeSubDomains; preload');
+    
+    next();
+  });
+}
 
 // Security middleware
 app.use(helmet({
@@ -17,8 +41,8 @@ app.use(helmet({
 
 app.use(cors({
   origin: process.env.NODE_ENV === 'production' 
-    ? (process.env.ALLOWED_ORIGINS?.split(',') || ['http://localhost:5173']) 
-    : ['http://localhost:5173', 'http://localhost:3000', 'http://localhost:5000'],
+    ? (process.env.ALLOWED_ORIGINS?.split(',') || ['http://localhost:3000']) 
+    : ['http://localhost:3000', 'http://localhost:5001', 'http://localhost:5173', 'http://localhost:5000'],
   credentials: true,
   methods: ['GET', 'POST', 'PUT', 'DELETE', 'PATCH'],
   allowedHeaders: ['Content-Type', 'Authorization'],
@@ -26,6 +50,22 @@ app.use(cors({
 
 app.use(express.json({ limit: '10mb' }));
 app.use(express.urlencoded({ extended: false, limit: '10mb' }));
+app.use(cookieParser());
+
+// CSRF Protection (only for state-changing operations)
+// Skip CSRF for API endpoints that use session authentication
+const csrfProtection = csrf({ 
+  cookie: {
+    httpOnly: true,
+    secure: process.env.NODE_ENV === 'production',
+    sameSite: 'strict'
+  }
+});
+
+// Apply CSRF to routes that need it (we'll add this selectively in routes)
+app.get('/api/csrf-token', csrfProtection, (req, res) => {
+  res.json({ csrfToken: req.csrfToken() });
+});
 
 app.use((req, res, next) => {
   const start = Date.now();
@@ -50,7 +90,7 @@ app.use((req, res, next) => {
         logLine = logLine.slice(0, 79) + "…";
       }
 
-      log(logLine);
+      viteLog(logLine);
     }
   });
 
@@ -105,15 +145,15 @@ app.use((req, res, next) => {
   }
 
   // ALWAYS serve the app on the port specified in the environment variable PORT
-  // Other ports are firewalled. Default to 5000 if not specified.
+  // Other ports are firewalled. Default to 5001 if not specified.
   // this serves both the API and the client.
   // It is the only port that is not firewalled.
-  const port = parseInt(process.env.PORT || '5000', 10);
+  const port = parseInt(process.env.PORT || '5001', 10);
   server.listen(port, () => {
-    log(`serving on port ${port}`);
+    viteLog(`serving on port ${port}`);
     
     // Schedule daily cleanup of old chat logs
     scheduleCleanup();
-    log('Scheduled daily cleanup of old chat history (30+ days)');
+    viteLog('Scheduled daily cleanup of old data (privacy protection)');
   });
 })();

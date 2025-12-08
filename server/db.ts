@@ -19,6 +19,7 @@ export const pool = mysql.createPool({
   idleTimeout: 60000, // 60 seconds
   enableKeepAlive: true, // Keep connections alive
   keepAliveInitialDelay: 0,
+  timezone: 'local', // Use local timezone instead of UTC
 });
 
 export const db = drizzle(pool, { schema, mode: 'default' });

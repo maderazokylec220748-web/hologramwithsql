@@ -1,6 +1,4 @@
 import { motion, AnimatePresence } from "framer-motion";
-import { Volume2, VolumeX } from "lucide-react";
-import { Button } from "@/components/ui/button";
 
 interface AvatarDisplayProps {
   isSpeaking: boolean;
@@ -71,20 +69,9 @@ export function AvatarDisplay({ isSpeaking, isMuted, onToggleMute }: AvatarDispl
         className="mt-3 sm:mt-4 px-3 sm:px-4 py-1.5 sm:py-2 rounded-full bg-[hsl(0,75%,25%)] border border-[hsl(48,100%,50%)] backdrop-blur-sm"
       >
         <p className="text-xs sm:text-sm font-semibold text-[hsl(48,100%,50%)] tracking-wide">
-          W.I.S. AI - Where Intelligence Starts
+          W.I.S. AI - Where Ideas Spark
         </p>
       </motion.div>
-
-      {/* Mute control */}
-      <Button
-        size="icon"
-        variant="ghost"
-        onClick={onToggleMute}
-        className="mt-2 sm:mt-4 text-[hsl(48,100%,50%)] hover:text-[hsl(48,100%,70%)] hover:bg-[hsl(48,100%,50%)]/10 transition-colors"
-        data-testid="button-toggle-mute"
-      >
-        {isMuted ? <VolumeX className="w-5 h-5 sm:w-6 sm:h-6" /> : <Volume2 className="w-5 h-5 sm:w-6 sm:h-6" />}
-      </Button>
     </div>
   );
 }

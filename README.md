@@ -1,240 +1,327 @@
-# Hologram School Assistant - MySQL Version
+# 🤖 WIS AI - Where Ideas Spark
 
-A real-time AI-powered holographic assistant for Westmead International School, converted from PostgreSQL to MySQL with real-time admin dashboard updates.
+<div align="center">
 
-## Features
+![Version](https://img.shields.io/badge/version-1.0.0-blue.svg)
+![License](https://img.shields.io/badge/license-MIT-green.svg)
+![Node](https://img.shields.io/badge/node-%3E%3D18.0.0-brightgreen.svg)
+![TypeScript](https://img.shields.io/badge/TypeScript-5.6.3-blue.svg)
 
-- **AI Holographic Assistant**: Interactive AI chatbot with Groq API integration
-- **Real-time Admin Dashboard**: Live updates for queries without page refresh
-- **MySQL Database**: Migrated from PostgreSQL to MySQL for broader compatibility
-- **Authentication System**: Secure admin login with bcrypt password hashing
-- **FAQ Management**: Admin interface for managing frequently asked questions
-- **User Management**: Admin can create and manage user accounts
-- **WebSocket Integration**: Real-time updates for admin dashboard
-- **Responsive Design**: Modern UI with Tailwind CSS and shadcn/ui components
+**An AI-powered holographic assistant for Westmead International School**
 
-## Tech Stack
+[Features](#-features) • [Quick Start](#-quick-start) • [Tech Stack](#-tech-stack) • [Documentation](#-documentation) • [License](#-license)
 
-- **Frontend**: React, TypeScript, Vite, Tailwind CSS, shadcn/ui
-- **Backend**: Express.js, Node.js
-- **Database**: MySQL with Drizzle ORM
-- **Authentication**: express-session with express-mysql-session
-- **AI Integration**: Groq API for chat responses
-- **Real-time**: WebSocket server for live updates
+</div>
 
-## Setup Instructions
+---
 
-### 1. Clone and Install Dependencies
+## 📖 About
 
-\`\`\`bash
-git clone https://github.com/skawngur05/hologramsql.git
-cd hologramsql
-npm install
-\`\`\`
+WIS AI is an intelligent holographic assistant designed for Westmead International School, providing real-time AI-powered responses to student and faculty queries about campus information, academics, events, and school services. Built as a thesis project, this system demonstrates modern web technologies, AI integration, and secure data management practices.
 
-### 2. Database Setup
+### Key Highlights
 
-Make sure you have MySQL server running on your system.
+- 🤖 **AI-Powered Responses** - Groq API integration for natural language understanding
+- 📊 **Real-time Admin Dashboard** - WebSocket-powered live updates
+- 🔒 **Enterprise Security** - CSRF protection, rate limiting, session management
+- 📱 **Responsive Design** - Modern UI with Tailwind CSS and shadcn/ui
+- 🗄️ **Automated Data Retention** - GDPR-compliant privacy management
+- ⚡ **High Performance** - Optimized with React Query and Vite
 
-Create a MySQL database:
-\`\`\`sql
-CREATE DATABASE hologram;
-\`\`\`
+---
 
-### 3. Environment Configuration
+## ✨ Features
 
-Copy the environment template:
-\`\`\`bash
-cp .env.example .env
-\`\`\`
-
-Edit `.env` with your configuration:
-\`\`\`env
-# Database configuration
-DATABASE_URL=mysql://username:password@localhost:3306/hologram
-
-# Alternative database configuration (for express-mysql-session)
-DATABASE_HOST=localhost
-DATABASE_PORT=3306
-DATABASE_USER=root
-DATABASE_PASSWORD=your_strong_password_here
-DATABASE_NAME=hologram
-
-# Groq API configuration (get your key from https://console.groq.com/keys)
-GROQ_API_KEY=your_groq_api_key_here
-
-# Server configuration
-PORT=3000
-NODE_ENV=development
-
-# Session secret (MUST be cryptographically random - generate using below command)
-# Generate with: node -e "console.log(require('crypto').randomBytes(64).toString('hex'))"
-SESSION_SECRET=your_generated_random_secret_here
-\`\`\`
-
-**🔒 IMPORTANT SECURITY NOTES:**
-- **NEVER** commit your actual `.env` file to version control (it's already in `.gitignore`)
-- **SET A STRONG DATABASE PASSWORD** - Never use an empty password
-- **GENERATE A RANDOM SESSION SECRET** - Use the command provided above
-- **REGENERATE API KEYS** - If you accidentally expose them
-
-### 4. Run Database Migrations
-
-Run the database setup script to create tables and seed initial data:
-\`\`\`bash
-npm run db:setup
-\`\`\`
-
-This will:
-- Create the required database tables
-- Add sample FAQ entries
-
-**⚠️ ADMIN USER CREATION:**
-Default admin credentials have been removed for security. Create your admin user manually:
-
-\`\`\`bash
-# Generate a password hash
-node scripts/generate-hash.js YourSecurePassword123
-
-# Then in MySQL, insert your admin user:
-# mysql -u root -p hologram
-# INSERT INTO admin_users (id, username, password, role, full_name, email) 
-# VALUES (UUID(), 'yourusername', 'PASTE_BCRYPT_HASH_HERE', 'admin', 'Your Name', 'your.email@westmead.edu.ph');
-\`\`\`
-
-### 5. Start the Development Server
-
-\`\`\`bash
-npm run dev
-\`\`\`
-
-The application will be available at \`http://localhost:3000\`
-
-## Usage
-
-### For Visitors
-- Navigate to the hologram interface
-- Ask questions about the school
-- Get AI-powered responses with text-to-speech
+### For Users
+- 💬 Interactive AI chat interface with holographic avatar
+- 🎯 Quick action buttons for common queries
+- 📝 Contextual responses about campus, academics, and events
+- 🔊 Text-to-speech support (optional)
 
 ### For Administrators
-1. Go to `/secure-f4c71bebae51ab7a` and login with your created admin credentials
-   - **Security Note:** Admin path uses cryptographically random hash following OWASP recommendations
-   - Bookmark this URL for easy access
+- 📊 Real-time analytics dashboard
+- 👥 User management system
+- ❓ FAQ management
+- 📈 Query tracking with response time metrics
+- 🔄 Live dashboard updates via WebSocket
+- 👍 Feedback analysis (positive/negative ratings)
 
-2. Access the admin dashboard to:
-   - View real-time query analytics
-   - Manage FAQs
-   - Create/manage admin users
-   - Monitor user interactions with live updates
+### Security Features
+- 🔐 Bcrypt password hashing
+- 🛡️ CSRF token protection
+- 🚦 Rate limiting (login, API endpoints)
+- 🔒 Session-based authentication
+- 📅 Automated data cleanup (7d queries, 30d analytics, 90d feedback)
+- 🔍 Winston logger with sensitive data sanitization
 
-3. **Change your password immediately** after first login for security
+---
 
-## Real-time Features
+## 🚀 Quick Start
 
-The admin dashboard now includes:
-- **Live Query Updates**: New user queries appear automatically without refresh
-- **Connection Status**: Visual indicator showing WebSocket connection status
-- **Real-time Statistics**: Query counts and metrics update in real-time
+### Prerequisites
 
-## API Endpoints
+- Node.js 18+ and npm
+- MySQL 8.0+ (XAMPP or standalone)
+- Groq API key ([Get one free](https://console.groq.com))
 
-### Public Endpoints
-- \`POST /api/chat\` - Submit questions to the AI assistant
-- \`GET /api/faqs/active\` - Get active FAQs for context
+### Installation
 
-### Admin Endpoints (Requires Authentication)
-- \`POST /api/auth/login\` - Admin login
-- \`POST /api/auth/logout\` - Admin logout
-- \`GET /api/auth/me\` - Get current user info
-- \`GET /api/admin/queries\` - Get all queries with real-time updates
-- \`GET /api/admin/faqs\` - FAQ management
-- \`GET /api/admin/users\` - User management
+1. **Clone the repository**
+```bash
+git clone https://github.com/yourusername/wis-ai-hologram.git
+cd wis-ai-hologram
+```
 
-### WebSocket Endpoints
-- \`ws://localhost:3000/ws\` - WebSocket connection for real-time updates
+2. **Install dependencies**
+```bash
+npm install
+cd client && npm install && cd ..
+```
 
-## Migration from PostgreSQL
+3. **Configure environment variables**
+```bash
+# Copy example file
+cp .env.example .env
 
-This version has been completely migrated from PostgreSQL to MySQL:
+# Edit .env with your credentials
+DATABASE_URL=mysql://root:your_password@localhost:3306/hologram
+GROQ_API_KEY=your_groq_api_key_here
+SESSION_SECRET=your_random_64_byte_secret
+NODE_ENV=development
+PORT=5001
+```
 
-### Key Changes Made:
-1. **Dependencies**: Replaced \`@neondatabase/serverless\` and \`connect-pg-simple\` with \`mysql2\` and \`express-mysql-session\`
-2. **Schema**: Updated from \`pgTable\` to \`mysqlTable\` with proper VARCHAR length specifications
-3. **ORM Operations**: Removed \`.returning()\` calls and added manual ID generation with \`crypto.randomUUID()\`
-4. **Session Store**: Migrated to MySQL-compatible session storage
-5. **Environment**: Added support for both connection URL and individual connection parameters
+4. **Set up the database**
+```bash
+# Create database
+mysql -u root -p -e "CREATE DATABASE hologram;"
 
-### Database Schema:
-- **admin_users**: User authentication and authorization
-- **queries**: User interactions and AI responses  
-- **faqs**: Frequently asked questions management
-- **sessions**: Session storage (created automatically)
+# Run migrations
+npm run db:setup
 
-## Security Features
+# Set up automated data retention
+node setup-mysql-events.cjs
+```
 
-This application implements multiple layers of security:
+5. **Start development servers**
+```bash
+npm run dev
+```
 
-### ✅ Implemented Security Measures
-- **Rate Limiting**: Prevents brute force attacks and API abuse
-  - Login: 5 attempts per 15 minutes
-  - Chat API: 20 requests per minute
-  - Admin APIs: 60 requests per minute
-- **Input Validation**: All inputs validated with Zod schemas
-  - Maximum field lengths enforced
-  - Type checking and sanitization
-  - SQL injection prevention via Drizzle ORM
-- **Password Security**: Bcrypt hashing with 10 rounds
-- **Session Management**: Secure session-based authentication
-  - HTTP-only cookies in production
-  - Cryptographically random session secrets
-  - 30-day session expiration
-- **CORS Protection**: Configured allowed origins
-- **Security Headers**: Helmet middleware for HTTP headers
-- **Connection Pooling**: Database connection limits prevent exhaustion
-- **Error Handling**: React Error Boundary for graceful error recovery
-- **WebSocket Security**: Message size limits and validation
+The application will be available at:
+- **Frontend:** http://localhost:3000
+- **Backend API:** http://localhost:5001
 
-### 🔒 Security Best Practices
-1. **Never commit `.env` files** to version control
-2. **Use strong passwords** (minimum 8 characters with uppercase, lowercase, and numbers)
-3. **Regenerate API keys** if accidentally exposed
-4. **Keep dependencies updated** regularly
-5. **Use HTTPS** in production environments
-6. **Monitor logs** for suspicious activity
-7. **Regular database backups**
-8. **Principle of least privilege** for database users
+### Default Admin Credentials
 
-### ⚠️ Before Production Deployment
-- [ ] Set strong MySQL root password
-- [ ] Generate new Groq API key
-- [ ] Generate cryptographic SESSION_SECRET
-- [ ] Create admin user with strong credentials
-- [ ] Enable HTTPS/SSL
-- [ ] Configure firewall rules
-- [ ] Set up database backups
-- [ ] Configure proper ALLOWED_ORIGINS for CORS
-- [ ] Review and test all security measures
+After running migrations, you can log in with:
+```
+Username: WISAI2025
+Password: Whereideassparks2025!
+Admin Panel: http://localhost:3000/admin
+```
 
-## Production Deployment
+⚠️ **Change these credentials immediately in production!**
 
-1. Set \`NODE_ENV=production\` in your environment
-2. Use a cryptographically random \`SESSION_SECRET\`
-3. Configure proper MySQL credentials with strong password
-4. Set up HTTPS/SSL certificates
-5. Configure \`ALLOWED_ORIGINS\` for CORS
-6. Build the application: \`npm run build\`
-7. Start the production server: \`npm start\`
-8. Monitor logs and set up alerts
+---
 
-## Contributing
+## 🛠️ Tech Stack
+
+### Frontend
+- **Framework:** React 18 with TypeScript
+- **Build Tool:** Vite 5
+- **Styling:** Tailwind CSS 3
+- **UI Components:** shadcn/ui (Radix UI primitives)
+- **Routing:** Wouter
+- **State Management:** TanStack React Query
+- **Animation:** Framer Motion
+
+### Backend
+- **Runtime:** Node.js 18+
+- **Framework:** Express.js 4
+- **Database:** MySQL 8 with Drizzle ORM
+- **Authentication:** express-session with MySQL store
+- **Security:** Helmet, CORS, CSRF (csurf), rate-limit
+- **Logging:** Winston with log rotation
+- **WebSocket:** ws library for real-time updates
+
+### AI Integration
+- **Provider:** Groq Cloud API
+- **Model:** Llama 3.1 (configurable)
+- **Features:** Streaming responses, context management
+
+---
+
+## 📁 Project Structure
+
+```
+wis-ai-hologram/
+├── client/                 # React frontend
+│   ├── src/
+│   │   ├── components/    # UI components
+│   │   ├── pages/         # Route pages
+│   │   ├── hooks/         # Custom React hooks
+│   │   └── lib/           # Utilities
+│   └── public/            # Static assets
+├── server/                # Express backend
+│   ├── index.ts          # Server entry point
+│   ├── routes.ts         # API routes
+│   ├── auth.ts           # Authentication
+│   ├── grok.ts           # AI integration
+│   └── db.ts             # Database connection
+├── shared/               # Shared schemas (Zod)
+├── migrations/           # Database migrations
+├── scripts/              # Utility scripts
+├── docs/                 # Documentation
+└── .env                  # Environment variables (not committed)
+```
+
+---
+
+## 📚 Documentation
+
+Comprehensive documentation is available in the `docs/` folder:
+
+- **[SECURITY.md](./SECURITY.md)** - Complete security guide and compliance info
+- **[docs/ADMIN_QUICK_REFERENCE.md](./docs/ADMIN_QUICK_REFERENCE.md)** - Admin panel guide
+- **[docs/COMPREHENSIVE_SECURITY_AUDIT_DEC2025.md](./docs/COMPREHENSIVE_SECURITY_AUDIT_DEC2025.md)** - Full security audit report
+- **[docs/DEVICE_TRANSFER_GUIDE.md](./docs/DEVICE_TRANSFER_GUIDE.md)** - Deployment checklist
+
+---
+
+## 🔧 Available Scripts
+
+### Development
+```bash
+npm run dev              # Start both frontend and backend
+npm run dev:client       # Start frontend only
+npm run dev:server       # Start backend only
+```
+
+### Database
+```bash
+npm run db:setup         # Run migrations and seed data
+npm run db:push          # Push schema changes to database
+npm run db:migrate       # Run specific migration
+```
+
+### Production Build
+```bash
+npm run build            # Build both frontend and backend
+npm run build:client     # Build frontend only
+npm run build:server     # Build backend only
+npm start                # Start production server
+```
+
+### Utilities
+```bash
+npm run check            # Type check with TypeScript
+node scripts/count-queries.js     # Count database queries
+node scripts/delete-queries.js    # Clean old queries manually
+```
+
+---
+
+## 🚢 Deployment
+
+### Production Checklist
+
+1. **Environment Variables**
+   - [ ] Set `NODE_ENV=production`
+   - [ ] Use strong random `SESSION_SECRET`
+   - [ ] Configure `ALLOWED_ORIGINS` for CORS
+   - [ ] Rotate all credentials from development
+
+2. **Database**
+   - [ ] Set up production MySQL instance
+   - [ ] Enable MySQL Event Scheduler for data retention
+   - [ ] Configure automated backups
+
+3. **Security**
+   - [ ] Enable HTTPS
+   - [ ] Verify CSP headers are active
+   - [ ] Test rate limiting
+   - [ ] Review SECURITY.md checklist
+
+4. **Build & Deploy**
+```bash
+npm run build
+npm start
+```
+
+### Recommended Hosting
+
+- **Frontend:** Vercel, Netlify, Cloudflare Pages
+- **Backend:** Railway, Render, AWS EC2, DigitalOcean
+- **Database:** PlanetScale, AWS RDS, DigitalOcean MySQL
+
+---
+
+## 🔒 Security
+
+This project implements enterprise-grade security practices:
+
+- ✅ **A- Security Grade** (92/100 in security audit)
+- ✅ OWASP Top 10 compliance (8/10)
+- ✅ GDPR-ready data retention policies
+- ✅ Rate limiting on all endpoints
+- ✅ CSRF protection on state-changing requests
+- ✅ Automated log sanitization
+
+See [SECURITY.md](./SECURITY.md) for complete details.
+
+### Reporting Security Issues
+
+If you discover a security vulnerability, please report it responsibly.
+
+---
+
+## 🤝 Contributing
+
+This is a thesis project, but suggestions and feedback are welcome!
 
 1. Fork the repository
-2. Create a feature branch
-3. Make your changes
-4. Test thoroughly
-5. Submit a pull request
+2. Create a feature branch (`git checkout -b feature/amazing-feature`)
+3. Commit your changes (`git commit -m 'Add amazing feature'`)
+4. Push to the branch (`git push origin feature/amazing-feature`)
+5. Open a Pull Request
 
-## License
+---
 
-MIT License - see LICENSE file for details
+## 📄 License
+
+This project is licensed under the MIT License - see the [LICENSE](./LICENSE) file for details.
+
+---
+
+## 👨‍💻 Author
+
+**Thesis Project**  
+Westmead International School  
+Academic Year 2024-2025
+
+---
+
+## 🙏 Acknowledgments
+
+- **Groq** - For providing the AI API
+- **shadcn/ui** - For the beautiful UI components
+- **Drizzle ORM** - For the excellent database toolkit
+- **Westmead International School** - For the opportunity and support
+
+---
+
+## 📞 Support
+
+- 🐛 Issues: [GitHub Issues](https://github.com/yourusername/wis-ai-hologram/issues)
+- 📖 Documentation: [docs/](./docs/)
+
+---
+
+<div align="center">
+
+**Built with ❤️ for Westmead International School**
+
+⭐ Star this repo if you find it helpful!
+
+</div>
