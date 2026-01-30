@@ -80,9 +80,19 @@ export function scheduleCleanup() {
     const timeUntil2AM = next2AM.getTime() - now.getTime();
 
     setTimeout(async () => {
-      await cleanupOldData();
+      try {
+        await cleanupOldData();
+      } catch (error) {
+        console.error('Cleanup failed:', error);
+      }
       // Schedule next cleanup
-      setInterval(cleanupOldData, 24 * 60 * 60 * 1000); // Every 24 hours
+      setInterval(async () => {
+        try {
+          await cleanupOldData();
+        } catch (error) {
+          console.error('Scheduled cleanup failed:', error);
+        }
+      }, 24 * 60 * 60 * 1000); // Every 24 hours
     }, timeUntil2AM);
 
     const retentionPolicy = `Queries/Chat=${process.env.QUERY_RETENTION_DAYS || '7'}d, Analytics=${process.env.ANALYTICS_RETENTION_DAYS || '30'}d, Feedback=${process.env.FEEDBACK_RETENTION_DAYS || '90'}d`;

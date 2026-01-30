@@ -230,7 +230,7 @@ export function ChatInterface({
             value={input}
             onChange={(e) => setInput(e.target.value)}
             placeholder="Ask about admissions, programs, campus..."
-            className="flex-1 bg-[hsl(0,70%,20%)] border-[hsl(48,100%,50%)] text-[hsl(45,30%,98%)] placeholder:text-[hsl(45,20%,65%)] text-sm sm:text-lg focus-visible:ring-[hsl(48,100%,50%)] overflow-x-auto whitespace-nowrap"
+            className="flex-1 bg-[hsl(0,70%,20%)] border-[hsl(48,100%,50%)] text-[hsl(45,30%,98%)] placeholder:text-[hsl(45,20%,65%)] text-xs sm:text-base focus-visible:ring-[hsl(48,100%,50%)] overflow-x-auto whitespace-nowrap"
             data-testid="input-chat-message"
           />
           

@@ -33,6 +33,22 @@ async function seed() {
       });
 
       await storage.createFaq({
+        question: "How do I enroll at Westmead?",
+        answer: "Enrollment at Westmead International School is simple and straightforward. You can enroll online through our website or visit our admissions office in person. The enrollment process requires submission of academic records, birth certificate, and a completed enrollment form. Our admissions team is ready to guide you through each step of the registration process.",
+        category: "admissions",
+        priority: 10,
+        isActive: true,
+      });
+
+      await storage.createFaq({
+        question: "What is the enrollment procedure?",
+        answer: "The enrollment procedure at Westmead includes: 1) Submit application form online or in person, 2) Present required documents (academic records, birth certificate, medical records), 3) Complete entrance assessment if applicable, 4) Finalize payment arrangements, 5) Get your enrollment confirmation. Our staff can assist you at each stage.",
+        category: "admissions",
+        priority: 9,
+        isActive: true,
+      });
+
+      await storage.createFaq({
         question: "What makes Westmead International School unique?",
         answer: "Westmead International School is the ONLY international school in the Philippines recognized by all three major education bodies: DepEd, TESDA, and CHED. Founded in 2004, we offer a comprehensive education from preparatory school to college level, focusing on developing Filipino talents for nation-building.",
         category: "general",
@@ -59,44 +75,60 @@ async function seed() {
     if (existingProfessors.length === 0) {
       const sampleProfessors = [
         {
-          fullName: "Dr. Juan Dela Cruz",
-          position: "Associate Professor",
+          fullName: "Dr. Arlene D. Castor",
+          position: "President & CEO",
           department: "Mathematics",
-          email: "juan.delacruz@westmead-is.edu.ph",
-          phone: "+63-917-1234567",
-          description: "Mathematics department head with 15 years of experience in secondary and tertiary education. Specializes in advanced calculus and mathematical modeling.",
+          email: "arlene.castor@westmead.edu.ph",
+          phone: "+63-43-740-1000",
+          description: "President and CEO of Westmead International School, leading the institution with over 20 years of experience in education.",
         },
         {
-          fullName: "Ms. Maria Santos",
-          position: "Senior Teacher",
-          department: "English & Literature",
-          email: "maria.santos@westmead-is.edu.ph",
-          phone: "+63-917-1234568",
-          description: "Specialized in literature, composition, and communication skills. Coordinator of the English department with expertise in creative writing programs.",
+          fullName: "Dr. Marites D. Manlongat",
+          position: "Vice President for Academic Affairs",
+          department: "SEBA/CAS",
+          email: "marites.manlongat@westmead.edu.ph",
+          phone: "+63-43-740-1001",
+          description: "Vice President for Academic Affairs overseeing curriculum and academic excellence across all departments.",
         },
         {
-          fullName: "Dr. Carlos Reyes",
-          position: "Lecturer",
-          department: "Physics & Science",
-          email: "carlos.reyes@westmead-is.edu.ph",
-          phone: "+63-917-1234569",
-          description: "Physics instructor with a doctorate in Physical Sciences. Expert in laboratory practices and hands-on scientific experimentation.",
+          fullName: "Iluminada De Chavez",
+          position: "Chairman of the Board",
+          department: "Board of Trustees",
+          email: "iluminada.dechavez@westmead.edu.ph",
+          phone: "+63-43-740-1002",
+          description: "Chairman of the Board providing strategic direction and governance for the institution.",
         },
         {
-          fullName: "Prof. Angela Mercado",
-          position: "Head of Department",
-          department: "Social Sciences",
-          email: "angela.mercado@westmead-is.edu.ph",
-          phone: "+63-917-1234570",
-          description: "History and Social Studies expert with 20 years of teaching experience. Passionate about developing critical thinking in students.",
+          fullName: "Mr. John Andrew C. Manalo",
+          position: "Professor",
+          department: "CITCS",
+          email: "john.manalo@westmead.edu.ph",
+          phone: "+63-43-740-1003",
+          description: "Professor in the College of Information Technology and Computer Science.",
         },
         {
           fullName: "Mr. Roberto Fernandez",
           position: "Instructor",
           department: "Arts & Design",
-          email: "roberto.fernandez@westmead-is.edu.ph",
-          phone: "+63-917-1234571",
-          description: "Visual arts instructor specializing in contemporary art and design. Mentor for student art exhibits and cultural programs.",
+          email: "roberto.fernandez@westmead.edu.ph",
+          phone: "+63-43-740-1004",
+          description: "Instructor specializing in Arts and Design programs.",
+        },
+        {
+          fullName: "Prof. Ernesto Carlo L. De Chavez",
+          position: "Dean",
+          department: "CTHM",
+          email: "ernesto.dechavez@westmead.edu.ph",
+          phone: "+63-43-740-1005",
+          description: "Dean of the College of Tourism and Hospitality Management.",
+        },
+        {
+          fullName: "Prof. Rosana De Chavez",
+          position: "CITCS Dean",
+          department: "CITCS",
+          email: "rosana.dechavez@westmead.edu.ph",
+          phone: "+63-43-740-1006",
+          description: "Dean of the College of Information Technology and Computer Science.",
         },
       ];
 

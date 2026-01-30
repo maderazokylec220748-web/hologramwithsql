@@ -9,11 +9,23 @@ import { scheduleCleanup } from './cleanup';
 import cookieParser from 'cookie-parser';
 import csrf from 'csurf';
 import dotenv from 'dotenv';
+import { initializeOllama } from './ollama';
+import { responseCache } from './cache';
 
 // Load environment variables
 dotenv.config();
 
 const app = express();
+
+// Handle uncaught errors
+process.on('unhandledRejection', (reason, promise) => {
+  console.error('Unhandled Rejection at:', promise, 'reason:', reason);
+});
+
+process.on('uncaughtException', (error) => {
+  console.error('Uncaught Exception:', error);
+  process.exit(1);
+});
 
 // Trust proxy for Nginx reverse proxy
 if (process.env.NODE_ENV === 'production') {
@@ -108,62 +120,109 @@ app.use((req, res, next) => {
 });
 
 (async () => {
-  const httpServer = createServer(app);
-  
-  // Create WebSocket server
-  const wss = new WebSocketServer({ 
-    server: httpServer,
-    path: '/ws'
-  });
-  
-  // WebSocket connection handling
-  wss.on('connection', (ws) => {
-    console.log('WebSocket client connected');
+  try {
+    // Clear response cache on server startup to ensure fresh AI responses
+    responseCache.clear();
+    console.log('🧹 Response cache cleared on startup');
     
-    ws.on('message', async (message) => {
-      try {
-        const data = JSON.parse(message.toString());
-        // Handle incoming messages
-        console.log('Received:', data);
-      } catch (error) {
-        console.error('WebSocket message error:', error);
-      }
+    const httpServer = createServer(app);
+    
+    // Create WebSocket server
+    const wss = new WebSocketServer({ 
+      server: httpServer,
+      path: '/ws'
     });
     
-    ws.on('close', () => {
-      console.log('WebSocket client disconnected');
+    // WebSocket connection handling
+    wss.on('connection', (ws) => {
+      console.log('WebSocket client connected');
+      
+      ws.on('message', async (message) => {
+        try {
+          const data = JSON.parse(message.toString());
+          // Handle incoming messages
+          console.log('Received:', data);
+        } catch (error) {
+          console.error('WebSocket message error:', error);
+        }
+      });
+      
+      ws.on('close', () => {
+        console.log('WebSocket client disconnected');
+      });
     });
-  });
 
-  const server = await registerRoutes(app);
+    const server = await registerRoutes(app);
 
-  app.use((err: any, _req: Request, res: Response, _next: NextFunction) => {
-    const status = err.status || err.statusCode || 500;
-    const message = err.message || "Internal Server Error";
+    app.use((err: any, _req: Request, res: Response, _next: NextFunction) => {
+      const status = err.status || err.statusCode || 500;
+      const message = err.message || "Internal Server Error";
 
-    res.status(status).json({ message });
-    throw err;
-  });
+      res.status(status).json({ message });
+      throw err;
+    });
 
-  // importantly only setup vite in development and after
-  // setting up all the other routes so the catch-all route
-  // doesn't interfere with the other routes
-  if (app.get("env") === "development") {
-    await setupVite(app, server);
-  } else {
-    serveStatic(app);
+    // importantly only setup vite in development and after
+    // setting up all the other routes so the catch-all route
+    // doesn't interfere with the other routes
+    const nodeEnv = process.env.NODE_ENV || 'development';
+    viteLog(`Node environment: ${nodeEnv}`);
+    viteLog(`Express app env: ${app.get("env")}`);
+    
+    if (nodeEnv === "development") {
+      viteLog('Setting up Vite dev server...');
+      await setupVite(app, server);
+    } else {
+      viteLog('Using static file serving (production mode)');
+      serveStatic(app);
+    }
+
+    // ALWAYS serve the app on the port specified in the environment variable PORT
+    // Other ports are firewalled. Default to 5001 if not specified.
+    // this serves both the API and the client.
+    // It is the only port that is not firewalled.
+    const port = parseInt(process.env.PORT || '5001', 10);
+    
+    // Initialize Ollama before starting server
+    console.log('Initializing Ollama AI...');
+    const ollamaStatus = await initializeOllama();
+    console.log(`Ollama Status: ${ollamaStatus.message}`);
+    
+    if (!ollamaStatus.ready) {
+      console.warn(`⚠️  WARNING: ${ollamaStatus.message}`);
+      console.warn('The AI assistant will not be available. Setup instructions:');
+      console.warn('1. Install Ollama from https://ollama.ai');
+      console.warn('2. Run: ollama serve (in another terminal)');
+      console.warn('3. Pull model: ollama pull tinyllama');
+      console.warn('See OLLAMA_SETUP.md for detailed instructions.');
+    } else {
+      console.log('✓ Ollama AI is ready for offline use');
+    }
+    
+    // PRE-LOAD and CACHE all school data at startup
+    // This ensures the first query is FAST and reduces database load
+    console.log('Pre-loading school data into cache...');
+    try {
+      const { loadAndCacheData } = await import('./cache-layer.js');
+      await loadAndCacheData();
+      console.log('✅ School data pre-loaded successfully');
+    } catch (cacheError) {
+      console.warn('⚠️  Could not pre-load cache (non-critical):', cacheError instanceof Error ? cacheError.message : cacheError);
+    }
+    
+    await new Promise<void>((resolve) => {
+      server.listen(port, () => {
+        viteLog(`serving on port ${port}`);
+        
+        // Schedule daily cleanup of old chat logs
+        scheduleCleanup();
+        viteLog('Scheduled daily cleanup of old data (privacy protection)');
+        
+        resolve();
+      });
+    });
+  } catch (error) {
+    console.error('Fatal startup error:', error);
+    process.exit(1);
   }
-
-  // ALWAYS serve the app on the port specified in the environment variable PORT
-  // Other ports are firewalled. Default to 5001 if not specified.
-  // this serves both the API and the client.
-  // It is the only port that is not firewalled.
-  const port = parseInt(process.env.PORT || '5001', 10);
-  server.listen(port, () => {
-    viteLog(`serving on port ${port}`);
-    
-    // Schedule daily cleanup of old chat logs
-    scheduleCleanup();
-    viteLog('Scheduled daily cleanup of old data (privacy protection)');
-  });
 })();

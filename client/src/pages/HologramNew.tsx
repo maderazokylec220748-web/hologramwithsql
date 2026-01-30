@@ -1,13 +1,15 @@
 import { useState, useRef, useEffect } from "react";
 import { motion } from "framer-motion";
 import logoImage from "@assets/westmead-removebg-preview_1760715284367.png";
-import kirkImage from "C:/Users/Bhojo/Downloads/hologramwithsql-main/hologramwithsql-main/client/src/assets/kirk.jpeg";
 
 export default function HologramNew() {
   const [isSpeaking, setIsSpeaking] = useState(false);
   const [audioLevel, setAudioLevel] = useState(0);
   const [showClickPrompt, setShowClickPrompt] = useState(true);
   const audioReadyRef = useRef(false);
+  const videoRef = useRef<HTMLVideoElement | null>(null);
+  const syntheisRef = useRef<SpeechSynthesisUtterance | null>(null);
+  const isSpeakingRef = useRef(false); // Track if actually speaking to prevent premature hiding
   
   // Web Audio API refs (same as AvatarTest)
   const audioRef = useRef<HTMLAudioElement | null>(null);
@@ -70,14 +72,135 @@ export default function HologramNew() {
           if (data.isSpeaking && data.text) {
             console.log('[Hologram] Starting TTS for text:', data.text.substring(0, 50) + '...');
           
-            setIsSpeaking(true);
-            // Audio handling removed - TTS service not configured
-            // To enable, configure a TTS service and uncomment audio code
+            // Use Web Speech API for text-to-speech
+            try {
+              const utterance = new SpeechSynthesisUtterance(data.text);
+              
+              // Get available voices
+              const voices = window.speechSynthesis.getVoices();
+              console.log('[Hologram] Available voices:', voices.map(v => v.name));
+              
+              if (voices.length > 0) {
+                // Try to find Juniper voice specifically
+                const juniperVoice = voices.find(v => v.name.toLowerCase().includes('juniper'));
+                
+                if (juniperVoice) {
+                  utterance.voice = juniperVoice;
+                  console.log('[Hologram] Selected Juniper voice');
+                } else {
+                  // Fallback to first available voice if Juniper not found
+                  utterance.voice = voices[0];
+                  console.log('[Hologram] Juniper not found, using:', voices[0].name);
+                }
+              }
+              
+              // Normal speech speed with protection against cutoff
+              utterance.rate = 0.9; // Normal speed
+              utterance.pitch = 1.1;
+              utterance.volume = 1;
+              
+              // Split text into sentences properly - combine punctuation with text
+              const rawSentences = data.text.split(/(?<=[.!?])\s+/);
+              const sentences = rawSentences.filter(s => s.trim().length > 0);
+              console.log(`[Hologram] Split into ${sentences.length} sentences:`, sentences);
+              
+              // Function to speak chunks sequentially
+              let chunkIndex = 0;
+              
+              const speakNextChunk = () => {
+                if (chunkIndex >= sentences.length) {
+                  console.log('[Hologram] All chunks spoken - waiting 1 second then stopping');
+                  // All done - wait a bit then stop video to ensure last audio completes
+                  setTimeout(() => {
+                    console.log('[Hologram] All speech complete - stopping video now');
+                    window.speechSynthesis.cancel();
+                    isSpeakingRef.current = false;
+                    setIsSpeaking(false);
+                    
+                    if (videoRef.current) {
+                      videoRef.current.pause();
+                      videoRef.current.currentTime = 0;
+                    }
+                  }, 1000); // Wait 1 second after last chunk
+                  return;
+                }
+                
+                const chunkText = sentences[chunkIndex].trim();
+                if (!chunkText) {
+                  chunkIndex++;
+                  speakNextChunk();
+                  return;
+                }
+                
+                console.log(`[Hologram] Speaking chunk ${chunkIndex + 1}/${sentences.length}: "${chunkText}"`);
+                
+                const chunkUtterance = new SpeechSynthesisUtterance(chunkText);
+                chunkUtterance.rate = 0.9;
+                chunkUtterance.pitch = 1.1;
+                chunkUtterance.volume = 1;
+                
+                // Use Juniper voice for this chunk too
+                const voices = window.speechSynthesis.getVoices();
+                if (voices.length > 0) {
+                  const juniperVoice = voices.find(v => v.name.toLowerCase().includes('juniper'));
+                  if (juniperVoice) {
+                    chunkUtterance.voice = juniperVoice;
+                  } else {
+                    chunkUtterance.voice = voices[0];
+                  }
+                }
+                
+                chunkUtterance.onend = () => {
+                  console.log(`[Hologram] Chunk ${chunkIndex + 1}/${sentences.length} finished`);
+                  // Move to next chunk
+                  chunkIndex++;
+                  speakNextChunk();
+                };
+                
+                chunkUtterance.onerror = (event) => {
+                  console.log('[Hologram] Chunk error:', event.error);
+                  chunkIndex++;
+                  speakNextChunk(); // Move to next chunk even if error
+                };
+                
+                window.speechSynthesis.speak(chunkUtterance);
+              };
+              
+              syntheisRef.current = utterance;
+              
+              // START VIDEO AND SET SPEAKING STATE
+              console.log('[Hologram] Starting video and speech');
+              isSpeakingRef.current = true; // Mark as speaking in ref
+              setIsSpeaking(true);
+              if (videoRef.current) {
+                videoRef.current.currentTime = 0;
+                videoRef.current.play().catch(err => console.log('[Hologram] Video play error:', err));
+              }
+              
+              // Don't use keep-alive interval - the video has loop attribute
+              // Just let it loop naturally while isSpeaking is true
+              
+              // Clear any previous speech
+              window.speechSynthesis.cancel();
+              
+              // Start speaking chunks - video will loop until all chunks finish
+              speakNextChunk();
+            } catch (err) {
+              console.log('[Hologram] TTS error:', err);
+            }
           
           } else if (!data.isSpeaking) {
             console.log('[Hologram] Received stop signal');
             setAudioLevel(0);
+            isSpeakingRef.current = false; // Mark as not speaking
             setIsSpeaking(false);
+            
+            // Cancel speech and stop video ONLY when explicitly told to stop
+            window.speechSynthesis.cancel();
+            if (videoRef.current) {
+              videoRef.current.pause();
+              videoRef.current.currentTime = 0;
+            }
           }
         }
       } catch (error) {
@@ -154,76 +277,33 @@ export default function HologramNew() {
         <LogoDisplay rotation={90} />
       </div>
 
-      {/* 4-Sided Image Display - always rendered, toggle visibility */}
+      {/* 4-Sided Video Display - shows when speaking */}
       <div className={`absolute inset-0 transition-opacity duration-500 ${isSpeaking ? 'opacity-100' : 'opacity-0 pointer-events-none'}`}>
         <div className="absolute inset-0 flex items-center justify-center">
           <div className="relative w-full h-full flex items-center justify-center">
-            {/* Top Image - Normal orientation */}
+            {/* Fullscreen Video Display */}
             <motion.div
-              initial={{ opacity: 0, y: -60 }}
-              animate={{ opacity: 1, y: 0 }}
-              transition={{ duration: 0.5 }}
-              className="absolute"
-              style={{ top: '5%', left: '50%', transform: 'translateX(-50%)' }}
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              transition={{ duration: 0.3 }}
+              className="absolute inset-0"
             >
-              <div className="w-96 h-[28rem] rounded-lg overflow-hidden shadow-2xl">
-                <img
-                  src={kirkImage}
-                  alt="Top Profile"
-                  className="w-full h-full object-cover"
-                />
-              </div>
-            </motion.div>
-
-            {/* Right Image - Rotated 90 degrees clockwise */}
-            <motion.div
-              initial={{ opacity: 0, x: 60 }}
-              animate={{ opacity: 1, x: 0 }}
-              transition={{ duration: 0.5, delay: 0.1 }}
-              className="absolute"
-              style={{ right: '5%', top: '50%', transform: 'translateY(-50%)' }}
-            >
-              <div className="w-96 h-[28rem] rounded-lg overflow-hidden shadow-2xl">
-                <img
-                  src={kirkImage}
-                  alt="Right Profile"
-                  className="w-full h-full object-cover rotate-90"
-                />
-              </div>
-            </motion.div>
-
-            {/* Bottom Image - Rotated 180 degrees */}
-            <motion.div
-              initial={{ opacity: 0, y: 60 }}
-              animate={{ opacity: 1, y: 0 }}
-              transition={{ duration: 0.5, delay: 0.2 }}
-              className="absolute"
-              style={{ bottom: '5%', left: '50%', transform: 'translateX(-50%)' }}
-            >
-              <div className="w-96 h-[28rem] rounded-lg overflow-hidden shadow-2xl">
-                <img
-                  src={kirkImage}
-                  alt="Bottom Profile"
-                  className="w-full h-full object-cover rotate-180"
-                />
-              </div>
-            </motion.div>
-
-            {/* Left Image - Rotated 270 degrees (or -90) */}
-            <motion.div
-              initial={{ opacity: 0, x: -60 }}
-              animate={{ opacity: 1, x: 0 }}
-              transition={{ duration: 0.5, delay: 0.3 }}
-              className="absolute"
-              style={{ left: '5%', top: '50%', transform: 'translateY(-50%)' }}
-            >
-              <div className="w-96 h-[28rem] rounded-lg overflow-hidden shadow-2xl">
-                <img
-                  src={kirkImage}
-                  alt="Left Profile"
-                  className="w-full h-full object-cover -rotate-90"
-                />
-              </div>
+              <video
+                ref={videoRef}
+                className="w-full h-full object-cover"
+                autoPlay
+                loop
+                playsInline
+                muted
+                onEnded={(e) => {
+                  // Prevent any interruption when video loops
+                  console.log('[Hologram] Video ended, restarting...');
+                  e.currentTarget.play();
+                }}
+              >
+                <source src="/Untitled design.mp4" type="video/mp4" />
+                Your browser does not support the video tag.
+              </video>
             </motion.div>
           </div>
         </div>

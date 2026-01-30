@@ -1,14 +1,13 @@
 import { useState, useEffect } from "react";
 import { Link } from "wouter";
 import { Button } from "@/components/ui/button";
-import { ArrowLeft, BarChart3, HelpCircle, Users, LogOut, Settings, BookOpen, Building2, Calendar } from "lucide-react";
+import { ArrowLeft, BarChart3, HelpCircle, Users, LogOut, BookOpen, Building2, Calendar } from "lucide-react";
 import { QueryDashboard } from "@/components/admin/QueryDashboard";
 import { FaqManager } from "@/components/admin/FaqManager";
 import { ProfessorsManager } from "@/components/admin/ProfessorsManager";
 import { FacilitiesManager } from "@/components/admin/FacilitiesManager";
 import { EventsManager } from "@/components/admin/EventsManager";
 import { UserManager } from "@/components/admin/UserManager";
-import { ApiSettings } from "@/components/admin/ApiSettings";
 import { LoginForm } from "@/components/admin/LoginForm";
 import { AnalyticsDashboard } from "@/pages/AnalyticsDashboard";
 import { useToast } from "@/hooks/use-toast";
@@ -130,7 +129,7 @@ export default function Admin() {
       </div>
 
       {/* Main Content with Sidebar */}
-      <div className="flex flex-1 overflow-hidden">
+      <div className="flex flex-1">
         {/* Sidebar Navigation */}
         <div className="w-48 bg-slate-50 border-r border-slate-200 overflow-y-auto">
           <div className="p-4 space-y-2">
@@ -148,25 +147,30 @@ export default function Admin() {
               <span>Analytics</span>
             </button>
 
+            {/* Queries - Available to All Roles */}
+            <div className="pt-2 pb-1">
+              <p className="px-4 text-xs font-semibold text-slate-500 uppercase tracking-wide">Reports</p>
+            </div>
+
+            <button
+              onClick={() => setActiveTab("queries")}
+              className={`w-full flex items-center gap-3 px-4 py-3 rounded-lg font-medium text-sm transition-all ${
+                activeTab === "queries"
+                  ? "bg-[hsl(0,75%,25%)] text-white"
+                  : "text-slate-700 hover:bg-slate-200"
+              }`}
+              data-testid="tab-queries"
+            >
+              <BarChart3 className="w-5 h-5" />
+              <span>Queries</span>
+            </button>
+
             {/* Admin Only Modules */}
             {currentUser?.role === 'admin' && (
               <>
                 <div className="pt-2 pb-1">
                   <p className="px-4 text-xs font-semibold text-slate-500 uppercase tracking-wide">Admin Modules</p>
                 </div>
-
-                <button
-                  onClick={() => setActiveTab("queries")}
-                  className={`w-full flex items-center gap-3 px-4 py-3 rounded-lg font-medium text-sm transition-all ${
-                    activeTab === "queries"
-                      ? "bg-[hsl(0,75%,25%)] text-white"
-                      : "text-slate-700 hover:bg-slate-200"
-                  }`}
-                  data-testid="tab-queries"
-                >
-                  <BarChart3 className="w-5 h-5" />
-                  <span>Queries</span>
-                </button>
 
                 <button
                   onClick={() => setActiveTab("faqs")}
@@ -239,19 +243,6 @@ export default function Admin() {
               <Users className="w-5 h-5" />
               <span>Users</span>
             </button>
-
-            <button
-              onClick={() => setActiveTab("api")}
-              className={`w-full flex items-center gap-3 px-4 py-3 rounded-lg font-medium text-sm transition-all ${
-                activeTab === "api"
-                  ? "bg-[hsl(0,75%,25%)] text-white"
-                  : "text-slate-700 hover:bg-slate-200"
-              }`}
-              data-testid="tab-api"
-            >
-              <Settings className="w-5 h-5" />
-              <span>API Settings</span>
-            </button>
           </div>
         </div>
 
@@ -260,7 +251,7 @@ export default function Admin() {
           <div className="p-6">
             {activeTab === "analytics" && <AnalyticsDashboard />}
 
-            {activeTab === "queries" && currentUser?.role === 'admin' && <QueryDashboard />}
+            {activeTab === "queries" && <QueryDashboard />}
 
             {activeTab === "faqs" && currentUser?.role === 'admin' && <FaqManager />}
 
@@ -269,6 +260,8 @@ export default function Admin() {
             {activeTab === "facilities" && currentUser?.role === 'admin' && <FacilitiesManager />}
 
             {activeTab === "events" && currentUser?.role === 'admin' && <EventsManager />}
+
+            {activeTab === "users" && <UserManager currentUser={currentUser} />}
           </div>
         </div>
       </div>

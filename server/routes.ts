@@ -3,7 +3,8 @@ import type { Express } from "express";
 import { createServer, type Server } from "http";
 import { WebSocketServer, WebSocket } from "ws";
 import { storage } from "./storage";
-import { getChatResponse, prepareTextForSpeech } from "./grok";
+import { getChatResponse, prepareTextForSpeech, getChatResponseStream } from "./grok";
+import { quickSemanticSearch } from "./semantic-search";
 import { generateSpeech } from "./tts";
 import { insertQuerySchema, insertFaqSchema, insertAdminUserSchema, insertProfessorSchema, insertFacilitySchema, insertEventSchema } from "@shared/schema";
 import { sessionMiddleware, requireAuth, requireAdmin } from "./auth";
@@ -182,11 +183,13 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return res.status(400).json({ error: "Question is required" });
       }
 
+      const startTime = Date.now();
+
       // Check cache first (only for non-conversational queries)
       const cacheKey = `${language}:${question}`;
       const cached = responseCache.get(cacheKey);
       if (cached && conversationHistory.length === 0) {
-        console.log(`Cache hit for question: ${question.substring(0, 50)}...`);
+        console.log(`✅ Cache hit for question: ${question.substring(0, 50)}...`);
         
         // Still save the query even for cached responses
         const query = await storage.createQuery({
@@ -213,9 +216,11 @@ export async function registerRoutes(app: Express): Promise<Server> {
         });
       }
 
-      const startTime = Date.now();
-      
-      // Get AI response from Grok with conversation history
+      // ========================================
+      // OPTION 3: Always use AI to construct answers
+      // AI has access to ALL database content
+      // AI constructs natural answers from ONLY database facts
+      // ========================================
       const { answer, category } = await getChatResponse(question, conversationHistory, language);
       
       const responseTime = Date.now() - startTime;
@@ -249,7 +254,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       // Check if there's already feedback for this query
       const existingFeedback = await storage.getFeedbackByQueryId(query.id);
 
-      res.json({
+      return res.json({
         answer,
         speechText,
         category,
@@ -260,6 +265,82 @@ export async function registerRoutes(app: Express): Promise<Server> {
     } catch (error) {
       console.error("Chat error:", error);
       res.status(500).json({ error: "Failed to process chat request" });
+    }
+  });
+
+  // Streaming chat endpoint - sends tokens in real-time via Server-Sent Events
+  app.post("/api/chat-stream", chatLimiter, async (req, res) => {
+    try {
+      const { question, userType = "visitor", conversationHistory = [], language = "en" } = req.body;
+      
+      if (!question || typeof question !== 'string') {
+        return res.status(400).json({ error: "Question is required" });
+      }
+
+      // Set up Server-Sent Events headers
+      res.setHeader('Content-Type', 'text/event-stream');
+      res.setHeader('Cache-Control', 'no-cache');
+      res.setHeader('Connection', 'keep-alive');
+      res.setHeader('Access-Control-Allow-Origin', '*');
+
+      const startTime = Date.now();
+      const cacheKey = `${language}:${question}`;
+
+      // ========================================
+      // OPTION 3: Always use AI to construct answers
+      // AI has access to ALL database content
+      // AI constructs natural answers from ONLY database facts
+      // ========================================
+      let fullAnswer = '';
+
+      // Stream tokens from AI
+      for await (const token of getChatResponseStream(question, conversationHistory, language)) {
+        fullAnswer += token;
+        // Send each token as an SSE event
+        res.write(`data: ${JSON.stringify({ token, partial: fullAnswer })}\n\n`);
+      }
+
+      const responseTime = Date.now() - startTime;
+
+      // Store the query after streaming completes
+      const query = await storage.createQuery({
+        question,
+        answer: fullAnswer,
+        userType,
+        category: 'stream',
+        responseTime,
+      });
+
+      // Prepare text for speech
+      const speechText = prepareTextForSpeech(fullAnswer);
+
+      // Cache the response only if no conversation history
+      if (conversationHistory.length === 0) {
+        responseCache.set(cacheKey, fullAnswer, speechText);
+      }
+
+      // Track analytics
+      analytics.trackQuery(question, 'stream', userType, responseTime);
+
+      // Check if there's already feedback for this query
+      const existingFeedback = await storage.getFeedbackByQueryId(query.id);
+
+      // Send final event with metadata
+      res.write(`data: ${JSON.stringify({ 
+        done: true,
+        complete: fullAnswer,
+        speechText,
+        category: 'stream',
+        queryId: query.id,
+        rating: existingFeedback?.rating || undefined,
+        responseTime
+      })}\n\n`);
+
+      res.end();
+    } catch (error) {
+      console.error("Chat stream error:", error);
+      res.write(`data: ${JSON.stringify({ error: "Streaming failed" })}\n\n`);
+      res.end();
     }
   });
 
@@ -319,8 +400,10 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // Clear chat history for session
   app.delete("/api/chat/clear", generalApiLimiter, (req, res) => {
     try {
-      // This is a client-side operation, just acknowledge
-      res.json({ success: true, message: 'Chat history cleared' });
+      // Clear the response cache when user clears chat
+      responseCache.clear();
+      console.log('✅ Response cache cleared by user');
+      res.json({ success: true, message: 'Chat history and cache cleared' });
     } catch (error) {
       console.error("Clear chat error:", error);
       res.status(500).json({ error: "Failed to clear chat" });

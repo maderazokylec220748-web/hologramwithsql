@@ -4,6 +4,7 @@ import logoImage from "@assets/westmead-removebg-preview_1760715284367.png";
 import { GLBModel } from "@/components/hologram/GLBModel";
 import { Button } from "@/components/ui/button";
 import { Pause, Play, X } from "lucide-react";
+import { useWebSpeechSynthesis } from "@/lib/speechSynthesis";
 
 export default function Hologram() {
   const [isSpeaking, setIsSpeaking] = useState(false);
@@ -11,6 +12,9 @@ export default function Hologram() {
   const [isPaused, setIsPaused] = useState(false);
   const [showControls, setShowControls] = useState(false);
   const [audioLevel, setAudioLevel] = useState(0);
+  
+  // Initialize Web Speech API fallback
+  const speechSynth = useWebSpeechSynthesis();
   
   // Debug: Log state changes
   useEffect(() => {
@@ -71,7 +75,10 @@ export default function Hologram() {
                 audioRef.current = null;
               }
               
-              // Request TTS audio
+              // Stop any existing speech synthesis
+              speechSynth.stop();
+              
+              // Request TTS audio from server
               console.log('[HOLOGRAM DEBUG] Requesting TTS from /api/tts');
               const ttsResponse = await fetch('/api/tts', {
                 method: 'POST',
@@ -80,12 +87,26 @@ export default function Hologram() {
               });
               
               if (!ttsResponse.ok) {
-                console.error('[HOLOGRAM DEBUG] TTS request failed:', ttsResponse.status, ttsResponse.statusText);
+                console.error('[HOLOGRAM DEBUG] TTS request failed:', ttsResponse.status);
                 throw new Error('TTS failed');
               }
               
-              console.log('[HOLOGRAM DEBUG] TTS response received, creating audio blob');
+              console.log('[HOLOGRAM DEBUG] TTS response received');
               const audioBlob = await ttsResponse.blob();
+              
+              // Check if we got actual audio data (not empty buffer)
+              if (audioBlob.size === 0) {
+                console.log('[HOLOGRAM DEBUG] Server returned empty audio, using Web Speech API');
+                // Use Web Speech API as fallback
+                speechSynth.speak(data.text, () => {
+                  console.log('[HOLOGRAM DEBUG] Web Speech synthesis ended');
+                  setAudioLevel(0);
+                  setIsSpeaking(false);
+                });
+                return;
+              }
+              
+              console.log('[HOLOGRAM DEBUG] Creating audio blob URL');
               const audioUrl = URL.createObjectURL(audioBlob);
               
               const audio = new Audio(audioUrl);
@@ -146,6 +167,17 @@ export default function Hologram() {
               audio.load();
             } catch (error) {
               console.error('[HOLOGRAM DEBUG] TTS playback error:', error);
+              // Fallback to Web Speech API on error
+              console.log('[HOLOGRAM DEBUG] Using Web Speech API fallback');
+              if (speechSynth.isSupported) {
+                speechSynth.speak(data.text, () => {
+                  console.log('[HOLOGRAM DEBUG] Web Speech synthesis ended');
+                  setAudioLevel(0);
+                  setIsSpeaking(false);
+                });
+              } else {
+                console.warn('[HOLOGRAM DEBUG] No TTS available (no server audio and no Web Speech API)');
+              }
             }
           } else if (!data.isSpeaking) {
             console.log('[HOLOGRAM DEBUG] Speaking stopped, stopping audio');

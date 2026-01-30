@@ -88,25 +88,25 @@ export function IdleLogo({ onActivate }: IdleLogoProps) {
             initial={{ opacity: 0, scale: 0.95 }}
             animate={{ opacity: 1, scale: 1 }}
             transition={{ duration: 0.35 }}
-            className="bg-[hsl(0,75%,10%)] border border-[hsl(48,100%,50%)] rounded-lg p-6 flex flex-col items-center gap-4"
+            className="bg-[hsl(0,75%,10%)] border border-[hsl(48,100%,50%)] rounded-lg p-8 sm:p-10 flex flex-col items-center gap-6 sm:gap-8"
           >
-            <div className="text-lg font-semibold text-[hsl(48,100%,50%)]">Choose language</div>
-            <div className="flex gap-4">
+            <div className="text-2xl sm:text-3xl font-semibold text-[hsl(48,100%,50%)]">Choose language</div>
+            <div className="flex gap-6 sm:gap-8">
               <button
-                className="px-4 py-2 rounded bg-[hsl(48,100%,50%)] text-black font-medium shadow"
+                className="px-8 sm:px-10 py-3 sm:py-4 rounded bg-[hsl(48,100%,50%)] text-black font-bold text-lg sm:text-xl shadow"
                 onClick={() => onActivate('en')}
               >
                 English
               </button>
               <button
-                className="px-4 py-2 rounded bg-[hsl(0,75%,30%)] text-white font-medium shadow"
+                className="px-8 sm:px-10 py-3 sm:py-4 rounded bg-[hsl(0,75%,30%)] text-white font-bold text-lg sm:text-xl shadow"
                 onClick={() => onActivate('tl')}
               >
                 Tagalog
               </button>
             </div>
             <button
-              className="mt-2 text-sm text-[hsl(45,30%,70%)] underline"
+              className="mt-2 text-base sm:text-lg text-[hsl(45,30%,70%)] underline"
               onClick={() => setShowLangOptions(false)}
             >
               Cancel

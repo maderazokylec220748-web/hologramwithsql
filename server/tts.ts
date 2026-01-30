@@ -1,23 +1,18 @@
-﻿import textToSpeech from '@google-cloud/text-to-speech';
-import { readFileSync, existsSync } from 'fs';
+﻿import { execSync } from 'child_process';
+import { writeFileSync, unlinkSync, existsSync } from 'fs';
+import { tmpdir } from 'os';
 import { join } from 'path';
+import { platform } from 'os';
 
-// Initialize Google Cloud TTS client with service account credentials (optional)
-const credentialsPath = join(process.cwd(), 'gen-lang-client-0429761550-118859e3c5dc.json');
-let client: textToSpeech.TextToSpeechClient | null = null;
-
-if (existsSync(credentialsPath)) {
-  try {
-    const credentials = JSON.parse(readFileSync(credentialsPath, 'utf8'));
-    client = new textToSpeech.TextToSpeechClient({
-      credentials,
-    });
-    console.log('Google Cloud TTS initialized successfully');
-  } catch (error) {
-    console.warn('Failed to initialize Google Cloud TTS:', error);
-  }
-} else {
-  console.warn('Google Cloud TTS credentials not found. TTS feature will be disabled.');
+// Try to detect espeak availability
+let ttsAvailable = false;
+try {
+  execSync('which espeak 2>/dev/null || where espeak', { stdio: 'ignore' });
+  ttsAvailable = true;
+  console.log('✓ TTS available: espeak found');
+} catch {
+  console.log('ℹ️ Server-side TTS disabled. Using browser Web Speech API instead.');
+  console.log('   Audio will be generated client-side (no external services needed)');
 }
 
 // In-memory cache for generated audio
@@ -25,9 +20,10 @@ const audioCache = new Map<string, Buffer>();
 const MAX_CACHE_SIZE = 100; // Cache up to 100 audio responses
 
 export async function generateSpeech(text: string): Promise<Buffer> {
-  // Check if TTS client is available
-  if (!client) {
-    throw new Error('Google Cloud TTS is not configured. Please add credentials file.');
+  // If TTS unavailable, return empty buffer - client will use Web Speech API instead
+  if (!ttsAvailable) {
+    // Return empty buffer - frontend will handle audio generation via Web Speech API
+    return Buffer.alloc(0);
   }
 
   // Check cache first
@@ -37,31 +33,31 @@ export async function generateSpeech(text: string): Promise<Buffer> {
     console.log('TTS cache hit');
     return cached;
   }
+
   try {
-    const request = {
-      input: { text },
-      voice: {
-        languageCode: 'en-US',
-        name: 'en-US-Studio-M', // Fast, natural male voice (WaveNet quality)
-        ssmlGender: 'MALE' as const,
-      },
-      audioConfig: {
-        audioEncoding: 'MP3' as const,
-        speakingRate: 1.0,
-      },
-    };
-
-    const [response] = await client.synthesizeSpeech(request);
+    // Create temp file for output
+    const tempFile = join(tmpdir(), `tts-${Date.now()}.wav`);
     
-    if (!response.audioContent) {
-      throw new Error('No audio content received from Google Cloud TTS');
+    // Use espeak to generate WAV audio
+    // -a 100 = amplitude, -s 150 = speed (words per minute), -w = write to WAV file
+    execSync(`espeak -a 100 -s 150 -w "${tempFile}" "${text.replace(/"/g, '\\"')}"`, { 
+      stdio: 'pipe',
+      maxBuffer: 10 * 1024 * 1024
+    });
+    
+    // Read the generated WAV file
+    const { readFileSync } = await import('fs');
+    const audioBuffer = readFileSync(tempFile);
+    
+    // Clean up temp file
+    try {
+      unlinkSync(tempFile);
+    } catch {
+      // Ignore cleanup errors
     }
-
-    const audioBuffer = Buffer.from(response.audioContent);
     
     // Cache the result
     if (audioCache.size >= MAX_CACHE_SIZE) {
-      // Remove oldest entry
       const firstKey = audioCache.keys().next().value;
       audioCache.delete(firstKey);
     }
@@ -70,8 +66,9 @@ export async function generateSpeech(text: string): Promise<Buffer> {
     
     return audioBuffer;
   } catch (error) {
-    console.error('Google Cloud TTS error:', error);
-    throw error;
+    console.error('Espeak TTS error:', error);
+    // Return empty buffer on error - client will use Web Speech API
+    return Buffer.alloc(0);
   }
 }
 

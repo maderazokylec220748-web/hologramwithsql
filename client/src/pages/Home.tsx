@@ -247,7 +247,7 @@ export default function Home() {
     abortControllerRef.current = new AbortController();
 
     try {
-      console.log(`[${requestId}] Sending request to /api/chat`);
+      console.log(`[${requestId}] Sending request to /api/chat-stream`);
       
       // Build conversation history (last 6 messages for context)
       const conversationHistory = messages.slice(-6).map(msg => ({
@@ -255,8 +255,8 @@ export default function Home() {
         content: msg.text
       }));
       
-      // Call the chat API with conversation history
-      const response = await fetch("/api/chat", {
+      // Call the STREAMING chat API with conversation history
+      const response = await fetch("/api/chat-stream", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ 
@@ -268,36 +268,106 @@ export default function Home() {
         signal: abortControllerRef.current.signal,
       });
 
-      console.log(`[${requestId}] Response received, status: ${response.status}`);
+      console.log(`[${requestId}] Stream opened, status: ${response.status}`);
 
       if (!response.ok) {
         console.error(`[${requestId}] Response not OK: ${response.status}`);
         throw new Error("Failed to get response");
       }
 
-      const data = await response.json();
-      console.log(`[${requestId}] Data parsed successfully, answer length: ${data.answer?.length || 0}`);
-      
-      // Create AI message
+      // Create AI message that will be updated with streaming tokens
       const aiMessage: Message = {
         id: `ai-${requestId}`,
-        text: data.answer || "I apologize, but I couldn't generate a response.",
+        text: "", // Will be filled in as tokens arrive
         isUser: false,
         timestamp: new Date(),
-        queryId: data.queryId,
-        rating: data.rating || undefined, // Include existing rating from server
+        queryId: undefined,
+        rating: undefined,
       };
       
-      console.log(`[${requestId}] Adding AI message to display`);
       setMessages((prev) => [...prev, aiMessage]);
-      setIsTyping(false);
+      setIsTyping(true); // Show typing indicator while streaming
       setIsSpeaking(true);
       
-      // Broadcast to hologram that AI is speaking (hologram will play audio)
-      broadcastToHologram(true, data.answer);
+      // Broadcast to hologram that AI is speaking (will receive complete answer at end)
+      broadcastToHologram(true, "");
 
-      // Show speaking animation based on text length (audio plays on hologram page)
-      const duration = Math.min((data.answer?.length || 100) * 50, 5000);
+      // Read streaming events
+      const reader = response.body?.getReader();
+      if (!reader) throw new Error("No response body");
+
+      const decoder = new TextDecoder();
+      let buffer = '';
+      let completeAnswer = '';
+      let metadata: any = {};
+
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+
+        buffer += decoder.decode(value, { stream: true });
+        const lines = buffer.split('\n');
+
+        // Process all complete lines
+        for (let i = 0; i < lines.length - 1; i++) {
+          const line = lines[i].trim();
+          if (!line || !line.startsWith('data: ')) continue;
+
+          try {
+            const data = JSON.parse(line.slice(6)); // Remove "data: " prefix
+            
+            if (data.error) {
+              console.error(`[${requestId}] Stream error:`, data.error);
+              break;
+            }
+
+            if (data.done) {
+              // Final event with metadata
+              metadata = data;
+              completeAnswer = data.complete || completeAnswer;
+              console.log(`[${requestId}] Stream complete, length: ${completeAnswer.length}`);
+            } else if (data.token) {
+              // Token received - update message in real-time
+              completeAnswer += data.token;
+              
+              setMessages((prev) => {
+                const updated = [...prev];
+                const lastMsg = updated[updated.length - 1];
+                if (lastMsg?.id === aiMessage.id) {
+                  lastMsg.text = completeAnswer;
+                }
+                return updated;
+              });
+            }
+          } catch (e) {
+            // Skip invalid JSON lines
+          }
+        }
+
+        // Keep the last incomplete line in the buffer
+        buffer = lines[lines.length - 1];
+      }
+
+      // Update message with final metadata and complete answer
+      setMessages((prev) => {
+        const updated = [...prev];
+        const lastMsg = updated[updated.length - 1];
+        if (lastMsg?.id === aiMessage.id) {
+          lastMsg.text = completeAnswer; // Ensure text is set (important for direct answers)
+          lastMsg.queryId = metadata.queryId;
+          lastMsg.rating = metadata.rating;
+        }
+        return updated;
+      });
+
+      console.log(`[${requestId}] Stream processing complete`);
+      setIsTyping(false);
+      
+      // Broadcast complete answer to hologram with speech
+      broadcastToHologram(true, completeAnswer);
+
+      // Show speaking animation based on text length
+      const duration = Math.min((completeAnswer?.length || 100) * 50, 5000);
       speechTimeoutRef.current = setTimeout(() => {
         setIsSpeaking(false);
         broadcastToHologram(false);

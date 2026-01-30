@@ -16,7 +16,11 @@
     "db:push": "drizzle-kit push",
     "db:setup": "node scripts/run-migration.js",
     "db:migrate": "node scripts/run-migration.js",
-    "seed": "tsx server/seed.ts"
+    "seed": "tsx server/seed.ts",
+    "setup:ollama:windows": "powershell -ExecutionPolicy Bypass -File .\\scripts\\setup-ollama.ps1",
+    "setup:ollama:unix": "bash scripts/setup-ollama.sh",
+    "setup:ollama": "npm run setup:ollama:windows",
+    "test:ollama": "node scripts/test-ollama.js"
   },
   "dependencies": {
     "@elevenlabs/elevenlabs-js": "2.28.0",
